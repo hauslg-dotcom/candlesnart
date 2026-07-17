@@ -1,0 +1,1482 @@
+<!doctype html>
+<html lang="en" data-world="mono">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Candlesnart — hand-painted candles &amp; beautiful accidents</title>
+<meta name="description" content="Hand-painted candles that end their lives as paintings. Scroll the story: a candle lights, melts, tips, falls — and becomes art.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,500;12..96,800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   CANDLESNART — a candle has to fall apart to become art.
+   World state lives on <html data-world="mono|color">.
+   The var flip at impact is intentionally NOT transitioned:
+   the inversion must happen in a single frame.
+   ============================================================ */
+:root{
+  --paper:#F2EBDF;
+  --wax:#EFE3CE;
+  --ink:#1C1A17;
+  --amber:#FFB03A;
+  --pink:#FF2E88;
+  --cyan:#00D4D8;
+  --acid:#FFE03D;
+  --violet:#5B2A86;
+
+  --bg:var(--paper);
+  --fg:var(--ink);
+  --accent:var(--ink);      /* mono world: no color above the floor */
+  --accent-2:var(--ink);
+  --focus:var(--ink);
+}
+html[data-world="color"]{
+  --bg:#F6EFE1;
+  --fg:var(--ink);
+  --accent:var(--pink);
+  --accent-2:var(--cyan);
+  --focus:var(--pink);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:auto}
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:Inter,system-ui,sans-serif;
+  line-height:1.55;
+  overflow-x:hidden;
+  min-height:100vh;
+}
+.display{font-family:"Bricolage Grotesque",Inter,sans-serif}
+::selection{background:var(--accent);color:var(--bg)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px;border-radius:2px}
+a{color:inherit}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+img,svg{max-width:100%;display:block}
+
+/* ---------- skip link ---------- */
+.skip{
+  position:fixed;left:1rem;top:-4rem;z-index:90;
+  background:var(--ink);color:var(--paper);
+  padding:.6rem 1rem;border-radius:10px 14px 9px 15px;
+  transition:top .2s;text-decoration:none;font-weight:600;font-size:.9rem;
+}
+.skip:focus-visible{top:1rem}
+
+/* ---------- grain (mandatory texture) ---------- */
+#grain{
+  position:fixed;inset:-50%;width:200%;height:200%;
+  z-index:80;pointer-events:none;opacity:.55;
+  mix-blend-mode:multiply;
+}
+
+/* ---------- header ---------- */
+header{
+  position:fixed;inset:0 0 auto 0;z-index:50;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:1rem 1.25rem;pointer-events:none;
+}
+header a,header button{pointer-events:auto}
+.wordmark{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:1.05rem;letter-spacing:.02em;text-decoration:none;
+  transform:rotate(-1.5deg);display:inline-block;
+}
+#soundToggle{
+  display:flex;align-items:center;gap:.45rem;
+  font-size:.8rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  padding:.5rem .8rem;border:2px solid currentColor;
+  border-radius:16px 11px 18px 10px / 12px 17px 10px 16px;
+  transform:rotate(1deg);
+  background:color-mix(in srgb, var(--bg) 70%, transparent);
+}
+#soundToggle .on-ind{display:none}
+#soundToggle[aria-pressed="true"] .on-ind{display:inline}
+#soundToggle[aria-pressed="true"] .off-ind{display:none}
+
+/* ---------- loader: a match strike, then the page ---------- */
+#loader{
+  position:fixed;inset:0;z-index:100;background:var(--paper);
+  display:grid;place-items:center;
+}
+#loader svg{width:min(46vw,260px)}
+html.loaded #loader{display:none}
+
+/* ---------- the pinned stage (Acts I–VI) ---------- */
+#stage-wrap{height:820vh;position:relative}
+#stage{
+  position:sticky;top:0;height:100vh;overflow:hidden;
+  will-change:transform;
+}
+#stageBg{position:absolute;inset:0;z-index:0;background:var(--paper)}
+#scene{
+  position:absolute;inset:0;width:100%;height:100%;
+  z-index:5;
+}
+#vignette{
+  position:absolute;inset:0;z-index:6;pointer-events:none;
+  background:radial-gradient(ellipse 90% 75% at 50% 42%, transparent 30%, rgba(18,15,11,.88) 100%);
+  opacity:.85;
+}
+#flash{
+  position:fixed;inset:0;z-index:40;background:#fff;
+  opacity:0;pointer-events:none;
+}
+#paint{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:30;pointer-events:none;
+}
+#stains{
+  position:fixed;inset:0;width:100%;height:100%;
+  z-index:1;pointer-events:none;
+  opacity:0;
+}
+html[data-world="color"] #stains{opacity:1}
+
+/* ---------- act copy ---------- */
+.act-copy{
+  position:absolute;z-index:10;pointer-events:none;
+  opacity:0;
+}
+.act-copy .small{font-size:clamp(.85rem,1.6vw,1rem);max-width:34ch}
+#copy-1{inset:0;display:grid;place-content:center;text-align:center;gap:1rem;padding:0 1.2rem}
+#copy-1 h1{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(2.6rem,10vw,7.5rem);line-height:.92;letter-spacing:-.02em;
+  transform:rotate(-1.2deg);
+}
+#copy-1 .sub{font-size:clamp(.9rem,1.8vw,1.15rem);opacity:.75}
+#scrollCue{
+  margin-top:1.5rem;justify-self:center;display:flex;flex-direction:column;align-items:center;gap:.3rem;
+  font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;opacity:.7;
+}
+#scrollCue svg{width:20px}
+#copy-2{left:6vw;top:18vh;max-width:42ch}
+#copy-2 .tagline{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(1.8rem,5.4vw,4rem);line-height:1.02;transform:rotate(-1deg);
+}
+#copy-2 .tagline .w{display:inline-block}
+#copy-3{right:6vw;top:16vh;max-width:36ch;text-align:right}
+#copy-3 h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(1.3rem,3.4vw,2.2rem);transform:rotate(1deg);margin-bottom:.6rem}
+#copy-4{inset:auto 0 12vh 0;text-align:center}
+#copy-4 p{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(1.4rem,4.5vw,3rem);transform:rotate(-.6deg);
+}
+#copy-6{inset:0;display:grid;place-content:center;text-align:center;padding:0 1rem}
+#copy-6 .line{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(2.2rem,8.5vw,6.4rem);line-height:.95;letter-spacing:-.02em;
+}
+#copy-6 .line:nth-child(2){color:var(--pink)}
+#copy-6 .line .w{display:inline-block;white-space:pre}
+#copy-6 .after-cue{margin-top:2rem;font-size:.8rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;opacity:0}
+
+/* ---------- color-world sections ---------- */
+.world-section{position:relative;z-index:2;padding:14vh 6vw}
+.world-section h2{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(2rem,6vw,4.4rem);line-height:.95;letter-spacing:-.02em;
+  margin-bottom:.6em;transform:rotate(-1deg);
+}
+.paint-word{
+  background:linear-gradient(104deg,var(--pink) 0 28%,var(--amber) 28% 52%,var(--cyan) 52% 76%,var(--violet) 76% 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+html[data-world="mono"] .paint-word{background:none;color:inherit}
+
+/* shop */
+#shop .lede{max-width:52ch;margin-bottom:3.5rem;font-size:1.05rem}
+.grid{
+  display:grid;gap:clamp(1rem,2.5vw,2rem);
+  grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));
+  max-width:1200px;
+}
+.card{
+  position:relative;list-style:none;
+  background:var(--paper);
+  border:3px solid var(--ink);
+  border-radius:22px 14px 26px 12px / 14px 24px 12px 26px;
+  padding:1.1rem 1.1rem 1.3rem;
+  transform:rotate(var(--tilt,0deg));
+  transition:transform .35s cubic-bezier(.34,1.56,.64,1);
+  opacity:0;                     /* revealed by the splatter-to-grid pass */
+}
+html[data-world="mono"] .card,
+html.fallback .card,
+.card.placed{opacity:1}
+.card:hover,.card:focus-within{transform:rotate(var(--tilt,0deg)) translateY(6px) scaleY(1.015)}
+.card figure{position:relative;border-radius:16px 10px 18px 9px;overflow:visible;margin-bottom:.9rem}
+.card .art{width:100%;aspect-ratio:4/3;border-radius:inherit;overflow:hidden;background:var(--wax)}
+.card .art svg{width:100%;height:100%}
+.card .melt{
+  position:absolute;left:8%;right:8%;top:88%;height:70px;pointer-events:none;
+  filter:url(#gooDom);
+}
+.card .melt i{
+  position:absolute;top:0;width:26px;height:26px;border-radius:50%;
+  background:var(--drip,var(--pink));
+  transform:translateY(-18px) scaleY(.4);
+  transition:transform .6s cubic-bezier(.34,1.2,.64,1);
+}
+.card .melt i:nth-child(1){left:12%}
+.card .melt i:nth-child(2){left:46%;width:34px;height:34px;transition-delay:.05s}
+.card .melt i:nth-child(3){left:76%;transition-delay:.1s}
+.card:hover .melt i,.card:focus-within .melt i{transform:translateY(14px) scaleY(1.7)}
+.card h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.25rem;line-height:1.1}
+.card .desc{font-size:.85rem;opacity:.75;margin:.3rem 0 .8rem}
+.card .row{display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+.price{font-weight:600}
+.add{
+  border:2.5px solid var(--ink);background:var(--ink);color:var(--paper);
+  padding:.5rem .95rem;font-weight:600;font-size:.85rem;
+  border-radius:14px 9px 16px 8px / 9px 15px 8px 14px;
+  transition:transform .2s,background .2s;
+}
+.add:hover{background:var(--accent);border-color:var(--accent);transform:rotate(-2deg) scale(1.06)}
+.photo-note{margin-top:2.5rem;font-size:.8rem;opacity:.55;max-width:60ch}
+
+/* playpen */
+#playpen{min-height:78vh}
+#gooZone{
+  position:relative;height:52vh;min-height:340px;margin-top:2rem;
+  border:3px dashed var(--ink);
+  border-radius:30px 18px 34px 16px / 18px 32px 16px 30px;
+  touch-action:pan-y;overflow:hidden;
+  background:color-mix(in srgb,var(--paper) 60%,transparent);
+}
+#gooBlobs{position:absolute;inset:0;filter:url(#gooDom)}
+.blob{
+  position:absolute;top:0;left:0;border-radius:50%;
+  will-change:transform;
+}
+#gooZone .hint{position:absolute;left:50%;bottom:.9rem;transform:translateX(-50%) rotate(-1deg);font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;font-weight:600;opacity:.55;pointer-events:none}
+
+/* about / contact */
+#about .cols{display:grid;gap:2.5rem;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));max-width:1100px}
+#about p{max-width:56ch;margin-bottom:1em}
+#contact form{max-width:560px;display:grid;gap:1.1rem;margin-top:2rem}
+#contact label{font-weight:600;font-size:.9rem;display:grid;gap:.4rem}
+#contact input,#contact textarea{
+  font:inherit;padding:.75rem .9rem;background:var(--paper);color:var(--ink);
+  border:2.5px solid var(--ink);
+  border-radius:14px 9px 16px 8px / 9px 15px 8px 14px;
+}
+#contact textarea{min-height:120px;resize:vertical}
+.btn{
+  display:inline-block;border:3px solid var(--ink);background:var(--accent);color:var(--paper);
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.05rem;
+  padding:.85rem 1.6rem;border-radius:20px 12px 22px 11px / 12px 20px 11px 22px;
+  transition:transform .2s;text-decoration:none;
+}
+html[data-world="mono"] .btn{background:var(--ink)}
+.btn:hover{transform:rotate(-1.5deg) scale(1.05)}
+
+/* finale */
+#finale{min-height:80vh;display:grid;place-content:center;text-align:center;gap:1.4rem}
+#finale h2{transform:rotate(1deg)}
+#miniCandle{width:120px;margin:0 auto}
+#finale .again{font-size:.9rem;opacity:.7}
+
+footer{
+  position:relative;z-index:2;text-align:center;padding:3rem 1.5rem 4rem;font-size:.85rem;
+}
+footer .wave{display:block;width:100%;height:40px;margin-bottom:2rem}
+
+/* ---------- custom cursor ---------- */
+#cursor{
+  position:fixed;left:0;top:0;z-index:70;pointer-events:none;
+  width:44px;height:44px;margin:-22px 0 0 -22px;
+  display:none;
+}
+@media (hover:hover) and (pointer:fine){
+  html.cursor-on{cursor:none}
+  html.cursor-on a,html.cursor-on button,html.cursor-on input,html.cursor-on textarea{cursor:none}
+  html.cursor-on #cursor{display:block}
+}
+#cursor .c-flame,#cursor .c-brush{position:absolute;inset:0;transition:opacity .15s}
+html[data-world="mono"] #cursor .c-brush{opacity:0}
+html[data-world="color"] #cursor .c-flame{opacity:0}
+
+/* ============================================================
+   STORYBOARD — the reduced-motion / fallback narrative.
+   Same story, seven still frames, zero movement.
+   ============================================================ */
+#storyboard{display:none;position:relative;z-index:2;padding:12vh 6vw 6vh}
+#storyboard h1{
+  font-family:"Bricolage Grotesque",sans-serif;font-weight:800;
+  font-size:clamp(2.4rem,8vw,5.5rem);line-height:.95;transform:rotate(-1deg);margin-bottom:.4em;
+}
+#storyboard .sub{margin-bottom:4rem;opacity:.75}
+.frame{
+  display:grid;gap:1.5rem;align-items:center;max-width:960px;margin:0 auto 5rem;
+  grid-template-columns:minmax(140px,260px) 1fr;
+}
+.frame:nth-child(even of .frame){direction:rtl}
+.frame>*{direction:ltr}
+.frame svg{
+  width:100%;background:var(--paper);border:3px solid var(--ink);
+  border-radius:24px 16px 28px 14px / 16px 26px 14px 28px;
+}
+.frame figcaption h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:1.4rem;margin-bottom:.35rem}
+.frame figcaption p{max-width:46ch;font-size:.95rem}
+@media (max-width:560px){.frame{grid-template-columns:1fr}}
+
+@media (prefers-reduced-motion:reduce){
+  #stage-wrap,#paint,#stains,#cursor,#loader,#soundToggle{display:none!important}
+  #storyboard{display:block}
+  .card{opacity:1!important;transform:rotate(var(--tilt,0deg))!important}
+  .card .melt{display:none}
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+html.fallback #stage-wrap,html.fallback #paint,html.fallback #stains,
+html.fallback #cursor,html.fallback #loader,html.fallback #soundToggle{display:none!important}
+html.fallback #storyboard{display:block}
+html.fallback .card{opacity:1!important}
+</style>
+<noscript>
+<style>
+  #stage-wrap,#paint,#stains,#cursor,#loader,#soundToggle{display:none!important}
+  #storyboard{display:block}
+  .card{opacity:1!important}
+</style>
+</noscript>
+</head>
+<body>
+
+<a class="skip" href="#shop">skip the story — go straight to the shop</a>
+
+<!-- shared SVG filters: the goo trick + roughened edges -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <filter id="gooDom">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+      <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="g"/>
+      <feComposite in="SourceGraphic" in2="g" operator="atop"/>
+    </filter>
+    <filter id="grainF" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.07"/></feComponentTransfer>
+    </filter>
+  </defs>
+</svg>
+
+<!-- grain overlay -->
+<svg id="grain" aria-hidden="true" focusable="false"><rect width="100%" height="100%" filter="url(#grainF)"/></svg>
+
+<!-- loader: a match striking -->
+<div id="loader" aria-hidden="true">
+  <svg viewBox="0 0 260 120">
+    <g id="matchG">
+      <rect id="matchStick" x="30" y="66" width="120" height="9" rx="4" fill="#C9A97C" transform="rotate(-8 90 70)"/>
+      <ellipse id="matchHead" cx="152" cy="58" rx="13" ry="15" fill="#1C1A17" transform="rotate(-8 152 58)"/>
+      <circle id="matchSpark" cx="152" cy="52" r="4" fill="#FFB03A" opacity="0"/>
+      <path id="matchFlame" d="M152 20 C162 34 165 46 159 55 C155 62 145 62 142 55 C137 46 141 33 152 20 Z" fill="#FFB03A" opacity="0"/>
+    </g>
+  </svg>
+</div>
+
+<header>
+  <a class="wordmark" href="#top" id="homeLink">Candlesnart</a>
+  <button id="soundToggle" aria-pressed="false">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 6 H5 L9 2 V14 L5 10 H2 Z" fill="currentColor"/>
+      <path class="on-ind" d="M11 5 C13 6.5 13 9.5 11 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path class="off-ind" d="M11 6 L15 10 M15 6 L11 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span class="label">sound</span>
+  </button>
+</header>
+
+<div id="cursor" aria-hidden="true">
+  <svg class="c-flame" viewBox="0 0 44 44">
+    <path d="M22 6 C29 15 31 23 27 29 C24 34 20 34 17 29 C13 23 15 14 22 6 Z" fill="#FFB03A"/>
+    <path d="M22 18 C25 22 25 27 22 29 C19 27 19 22 22 18 Z" fill="#F2EBDF"/>
+  </svg>
+  <svg class="c-brush" viewBox="0 0 44 44">
+    <rect x="20" y="4" width="6" height="18" rx="3" fill="#1C1A17" transform="rotate(35 22 22)"/>
+    <path d="M14 26 C13 32 10 36 8 38 C13 38 18 36 20 31 Z" fill="#FF2E88" transform="rotate(35 22 22)"/>
+  </svg>
+</div>
+
+<canvas id="stains" aria-hidden="true"></canvas>
+
+<main id="top">
+
+  <!-- ==================== THE ANIMATED STORY ==================== -->
+  <div id="experience">
+    <section id="stage-wrap" aria-label="The story of a candle that becomes a painting">
+      <div id="stage">
+        <div id="stageBg" aria-hidden="true"></div>
+
+        <svg id="scene" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+          <defs>
+            <filter id="gooScene">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
+              <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -9" result="g"/>
+              <feComposite in="SourceGraphic" in2="g" operator="atop"/>
+            </filter>
+            <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#FFB03A" stop-opacity=".85"/>
+              <stop offset="45%" stop-color="#FFB03A" stop-opacity=".28"/>
+              <stop offset="100%" stop-color="#FFB03A" stop-opacity="0"/>
+            </radialGradient>
+            <radialGradient id="tableLightGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#FFD79A" stop-opacity=".55"/>
+              <stop offset="55%" stop-color="#FFC66B" stop-opacity=".18"/>
+              <stop offset="100%" stop-color="#FFB03A" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="pillarShade" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#1C1A17" stop-opacity=".14"/>
+              <stop offset="22%" stop-color="#1C1A17" stop-opacity="0"/>
+              <stop offset="78%" stop-color="#1C1A17" stop-opacity="0"/>
+              <stop offset="100%" stop-color="#1C1A17" stop-opacity=".2"/>
+            </linearGradient>
+            <clipPath id="pillarClip">
+              <path d="M452 428 C447 468 456 516 451 566 C448 608 455 652 450 688 L554 690 C559 646 551 602 556 556 C560 512 550 468 556 430 C520 419 486 420 452 428 Z"/>
+            </clipPath>
+          </defs>
+
+          <g id="camScale">
+            <g id="camPan">
+
+              <!-- table -->
+              <g id="tableG">
+                <path d="M148 692 C330 686 640 690 782 688 L780 742 C600 748 320 744 152 746 Z" fill="#1C1A17"/>
+                <path d="M154 696 C340 691 620 694 776 692" stroke="#3A362F" stroke-width="3" fill="none" opacity=".6"/>
+                <ellipse id="tableLight" cx="500" cy="688" rx="380" ry="120" fill="url(#tableLightGrad)" opacity="0"/>
+              </g>
+
+              <!-- floor, far below: only seen during the fall -->
+              <rect id="floor" x="-400" y="1556" width="1800" height="400" fill="#14120F"/>
+
+              <!-- droplet trail for the fall -->
+              <g id="dropletsG" fill="#EFE3CE">
+            <circle class="dropT" cx="768" cy="760" r="9" opacity="0"/>
+            <circle class="dropT" cx="800" cy="930" r="7" opacity="0"/>
+            <circle class="dropT" cx="782" cy="1110" r="10" opacity="0"/>
+            <circle class="dropT" cx="820" cy="1300" r="6" opacity="0"/>
+          </g>
+
+              <!-- the candle -->
+              <g id="candleFall">
+                <ellipse id="candleShadow" cx="502" cy="712" rx="95" ry="14" fill="#0E0D0B" opacity=".45"/>
+                <g id="candleTip">
+                  <g id="candleRock">
+                    <g id="candleWobble">
+
+                      <!-- melt pool (goo) -->
+                      <g id="poolG" filter="url(#gooScene)" fill="#EFE3CE">
+                        <ellipse class="pool" cx="470" cy="694" rx="34" ry="10"/>
+                        <ellipse class="pool" cx="516" cy="697" rx="26" ry="8"/>
+                        <ellipse class="pool" cx="493" cy="700" rx="42" ry="9"/>
+                      </g>
+
+                      <!-- pillar -->
+                      <path id="pillar" d="M452 428 C447 468 456 516 451 566 C448 608 455 652 450 688 L554 690 C559 646 551 602 556 556 C560 512 550 468 556 430 C520 419 486 420 452 428 Z" fill="#EFE3CE"/>
+                      <path d="M452 428 C447 468 456 516 451 566 C448 608 455 652 450 688 L554 690 C559 646 551 602 556 556 C560 512 550 468 556 430 C520 419 486 420 452 428 Z" fill="url(#pillarShade)"/>
+                      <!-- faint tonal brush strokes: the paint job, still asleep -->
+                      <g stroke="#DCCBAA" stroke-width="7" stroke-linecap="round" fill="none" opacity=".7">
+                        <path d="M468 470 C478 492 470 520 476 545"/>
+                        <path d="M522 455 C516 490 526 522 518 560"/>
+                        <path d="M496 585 C500 612 492 640 498 664"/>
+                      </g>
+                      <!-- foreshadowing: color bleeding INSIDE the wax only -->
+                      <g id="foreshadow" clip-path="url(#pillarClip)" opacity="0">
+                        <ellipse cx="480" cy="530" rx="34" ry="60" fill="#FF2E88" opacity=".5"/>
+                        <ellipse cx="526" cy="610" rx="30" ry="52" fill="#00D4D8" opacity=".45"/>
+                        <ellipse cx="500" cy="460" rx="26" ry="34" fill="#FFE03D" opacity=".35"/>
+                      </g>
+                      <ellipse id="rim" cx="504" cy="427" rx="52" ry="12" fill="#F7EEDC"/>
+                      <ellipse cx="504" cy="429" rx="40" ry="8" fill="#E4D5B8"/>
+
+                      <!-- drips (goo) running down the side -->
+                      <g id="dripsG" filter="url(#gooScene)" fill="#EFE3CE">
+                        <path class="drip d1" d="M455 432 C450 460 456 490 452 520 C450 536 460 540 464 524 C468 498 462 462 466 434 Z"/>
+                        <circle class="droplet dd1" cx="458" cy="520" r="9"/>
+                        <path class="drip d2" d="M549 434 C554 458 548 484 553 512 C555 526 545 530 542 515 C539 490 545 460 541 436 Z"/>
+                        <circle class="droplet dd2" cx="547" cy="512" r="8"/>
+                      </g>
+
+                      <!-- invisible marker: tracks the candle base through every transform -->
+                      <circle id="impactPoint" cx="502" cy="660" r="2" opacity="0"/>
+
+                      <!-- wick + ember -->
+                      <path id="wick" d="M503 400 q4 9 1 20" stroke="#1C1A17" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+                      <circle id="ember" cx="504" cy="403" r="3.5" fill="#FFB03A" opacity="0"/>
+
+                      <!-- flame -->
+                      <g id="flameG" opacity="0">
+                        <circle id="flare" cx="504" cy="380" r="240" fill="url(#glowGrad)" opacity="0"/>
+                        <circle id="glow" cx="504" cy="382" r="95" fill="url(#glowGrad)"/>
+                        <g id="flameStretch">
+                          <g id="flameInner">
+                            <path id="flameBody" d="M504 322 C521 346 526 368 518 388 C513 400 495 400 490 388 C481 368 487 345 504 322 Z" fill="#FFB03A"/>
+                            <path id="flameCore" d="M504 352 C511 362 512 376 506 384 C503 388 501 388 499 384 C494 376 497 362 504 352 Z" fill="#FFF3DC"/>
+                          </g>
+                        </g>
+                      </g>
+
+                    </g>
+                  </g>
+                </g>
+              </g>
+
+            </g>
+          </g>
+        </svg>
+
+        <div id="vignette" aria-hidden="true"></div>
+
+        <!-- ACT I -->
+        <div class="act-copy" id="copy-1">
+          <h1 class="kinetic">CANDLESNART</h1>
+          <p class="sub">hand-painted candles &amp; other beautiful accidents</p>
+          <div id="scrollCue">
+            <span>scroll to strike a match</span>
+            <svg viewBox="0 0 20 26" fill="none"><path d="M10 2 V20 M4 15 L10 22 L16 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <!-- ACT II -->
+        <div class="act-copy" id="copy-2">
+          <p class="tagline kinetic"><span class="w">Every&nbsp;</span><span class="w">candle&nbsp;</span><span class="w">ends&nbsp;</span><span class="w">as&nbsp;</span><span class="w">a&nbsp;</span><span class="w">painting.</span></p>
+        </div>
+
+        <!-- ACT III -->
+        <div class="act-copy" id="copy-3">
+          <h2>painted by hand.<br>finished by fire.</h2>
+          <p class="small">We paint every candle with thick, sloppy, joyful strokes — then hand it over. You light it. Gravity does the rest. We just get the mess started.</p>
+        </div>
+
+        <!-- ACT IV -->
+        <div class="act-copy" id="copy-4">
+          <p class="kinetic">go on. push.</p>
+        </div>
+
+        <!-- ACT VI -->
+        <div class="act-copy" id="copy-6">
+          <p class="line"><span class="w">IT </span><span class="w">HAS </span><span class="w">TO </span><span class="w">FALL </span><span class="w">APART</span></p>
+          <p class="line"><span class="w">TO </span><span class="w">BECOME </span><span class="w">ART.</span></p>
+          <p class="after-cue">keep scrolling — the mess continues</p>
+        </div>
+
+      </div>
+    </section>
+
+<!-- ==================== STORYBOARD (reduced motion / fallback) ==================== -->
+  <div id="storyboard">
+    <h1>CANDLESNART</h1>
+    <p class="sub">hand-painted candles &amp; other beautiful accidents — the story, in seven stills.</p>
+
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect x="30" y="140" width="140" height="14" rx="4" fill="#1C1A17"/><rect x="82" y="60" width="36" height="82" rx="5" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/><path d="M100 50 q3 5 1 10" stroke="#1C1A17" stroke-width="3" fill="none"/></svg>
+      <figcaption><h2>I. Still life</h2><p>A candle on a table. Bone, wax, shadow. It waits, the way candles do — patiently, and with excellent posture.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect x="30" y="140" width="140" height="14" rx="4" fill="#1C1A17"/><rect x="82" y="60" width="36" height="82" rx="5" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/><circle cx="100" cy="44" r="22" fill="#FFB03A" opacity=".25"/><path d="M100 28 C108 38 110 48 105 56 C102 61 98 61 95 56 C90 48 92 37 100 28 Z" fill="#FFB03A"/></svg>
+      <figcaption><h2>II. The light</h2><p>The wick catches. Warm amber spills across the table. Every candle ends as a painting — but first, it has to burn.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect x="30" y="140" width="140" height="14" rx="4" fill="#1C1A17"/><rect x="82" y="70" width="36" height="72" rx="5" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/><path d="M100 38 C107 47 109 56 104 63 C101 68 98 68 95 63 C91 56 93 46 100 38 Z" fill="#FFB03A"/><ellipse cx="100" cy="144" rx="34" ry="7" fill="#EFE3CE" stroke="#1C1A17" stroke-width="2"/><path d="M84 74 C82 92 86 112 83 130" stroke="#EFE3CE" stroke-width="8" fill="none" stroke-linecap="round"/></svg>
+      <figcaption><h2>III. The melt</h2><p>The wax softens and runs. Deep inside it, something pink and something cyan are waking up. Painted by hand, finished by fire.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect x="30" y="140" width="120" height="14" rx="4" fill="#1C1A17"/><g transform="rotate(18 140 140)"><rect x="122" y="60" width="36" height="82" rx="5" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/><path d="M140 32 C147 41 149 50 144 57 C141 62 138 62 135 57 C131 50 133 40 140 32 Z" fill="#FFB03A"/></g></svg>
+      <figcaption><h2>IV. The tip</h2><p>Something nudges it. (It was you.) It rocks, scoots to the edge of the table, and balances there, deciding.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#14120F" rx="10"/><g transform="rotate(70 100 100)"><rect x="82" y="60" width="36" height="82" rx="5" fill="#EFE3CE"/></g><path d="M120 40 C128 50 130 62 124 70 C120 76 114 74 112 68 C108 58 112 48 120 40 Z" fill="#FFB03A"/><circle cx="70" cy="60" r="5" fill="#EFE3CE"/><circle cx="86" cy="34" r="4" fill="#EFE3CE"/></svg>
+      <figcaption><h2>V. The fall</h2><p>It goes. The fall lasts longer than physics allows — dreamlike, slow, silent. The flame streaks upward. The world holds its breath.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#F6EFE1" rx="10"/><circle cx="100" cy="120" r="42" fill="#FF2E88"/><circle cx="60" cy="90" r="20" fill="#00D4D8"/><circle cx="146" cy="88" r="16" fill="#FFE03D"/><circle cx="140" cy="146" r="18" fill="#5B2A86"/><circle cx="58" cy="140" r="13" fill="#FFB03A"/><circle cx="104" cy="56" r="10" fill="#00D4D8"/></svg>
+      <figcaption><h2>VI. Impact</h2><p>SPLAT. One white frame, and the whole world inverts from monochrome into technicolor. It has to fall apart to become art.</p></figcaption>
+    </figure>
+    <figure class="frame">
+      <svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#F6EFE1" rx="10"/><rect x="30" y="36" width="60" height="56" rx="8" fill="#FF2E88" opacity=".85"/><rect x="110" y="36" width="60" height="56" rx="8" fill="#00D4D8" opacity=".85"/><rect x="30" y="110" width="60" height="56" rx="8" fill="#FFE03D" opacity=".9"/><rect x="110" y="110" width="60" height="56" rx="8" fill="#5B2A86" opacity=".85"/></svg>
+      <figcaption><h2>VII. The art</h2><p>The paint the candle became is now the world — and the shop. Scroll on for candles that can't wait for their turn to fall.</p></figcaption>
+    </figure>
+  </div>
+
+    <!-- ==================== ACT VII: THE COLOR WORLD ==================== -->
+
+    <section id="shop" class="world-section" aria-labelledby="shop-h">
+      <h2 id="shop-h">the <span class="paint-word">splatter</span> collection</h2>
+      <p class="lede">Every candle here was painted by a human hand on a good day. Burn them, tip them, knock them off tables — each one is a painting waiting for its dramatic exit.</p>
+      <ul class="grid" id="cardGrid">
+        <li class="card" style="--tilt:-1.2deg" data-color="#FF2E88">
+          <figure><div class="art"></div><div class="melt" style="--drip:#FF2E88"><i></i><i></i><i></i></div></figure>
+          <h3>Tiny Riot</h3>
+          <p class="desc">Hot pink chaos on bone wax. Burns loud, ends louder.</p>
+          <div class="row"><span class="price">$34</span><button class="add" type="button">add to cart</button></div>
+        </li>
+        <li class="card" style="--tilt:.8deg" data-color="#00D4D8">
+          <figure><div class="art"></div><div class="melt" style="--drip:#00D4D8"><i></i><i></i><i></i></div></figure>
+          <h3>Blue Hour</h3>
+          <p class="desc">Electric cyan drips for people who nap at 6pm on purpose.</p>
+          <div class="row"><span class="price">$34</span><button class="add" type="button">add to cart</button></div>
+        </li>
+        <li class="card" style="--tilt:-.6deg" data-color="#FFE03D">
+          <figure><div class="art"></div><div class="melt" style="--drip:#FFE03D"><i></i><i></i><i></i></div></figure>
+          <h3>Lemon Alarm</h3>
+          <p class="desc">Acid yellow. Wakes up the whole shelf. Sorry, shelf.</p>
+          <div class="row"><span class="price">$32</span><button class="add" type="button">add to cart</button></div>
+        </li>
+        <li class="card" style="--tilt:1deg" data-color="#5B2A86">
+          <figure><div class="art"></div><div class="melt" style="--drip:#5B2A86"><i></i><i></i><i></i></div></figure>
+          <h3>Violet Fainting Couch</h3>
+          <p class="desc">Deep violet, extremely dramatic, faints beautifully at 190°F.</p>
+          <div class="row"><span class="price">$38</span><button class="add" type="button">add to cart</button></div>
+        </li>
+        <li class="card" style="--tilt:-1deg" data-color="#FFB03A">
+          <figure><div class="art"></div><div class="melt" style="--drip:#FFB03A"><i></i><i></i><i></i></div></figure>
+          <h3>Amber Forever</h3>
+          <p class="desc">The flame's own color. The only one we let upstairs early.</p>
+          <div class="row"><span class="price">$36</span><button class="add" type="button">add to cart</button></div>
+        </li>
+        <li class="card" style="--tilt:.7deg" data-color="#FF2E88" data-multi="1">
+          <figure><div class="art"></div><div class="melt" style="--drip:#00D4D8"><i></i><i></i><i></i></div></figure>
+          <h3>The Whole Palette</h3>
+          <p class="desc">Every color we own, on one candle. Our therapist's favorite.</p>
+          <div class="row"><span class="price">$44</span><button class="add" type="button">add to cart</button></div>
+        </li>
+      </ul>
+      <p class="photo-note">Placeholder art: these vector candles are stand-ins. Swap in real photos of the real candles — nothing beats actual paint on actual wax.</p>
+    </section>
+
+    <section id="playpen" class="world-section" aria-labelledby="play-h">
+      <h2 id="play-h">wax you can <span class="paint-word">throw</span></h2>
+      <p class="lede">Leftover blobs from the crash. Grab one. Fling it. They merge when they're feeling social.</p>
+      <div id="gooZone">
+        <div id="gooBlobs" aria-hidden="true"></div>
+        <p class="hint">drag the blobs — they don't mind</p>
+      </div>
+    </section>
+
+    <section id="about" class="world-section" aria-labelledby="about-h">
+      <h2 id="about-h">the <span class="paint-word">maker</span></h2>
+      <div class="cols">
+        <div>
+          <p>Candlesnart started with one dropped candle and one very good stain on the studio floor. We stared at it for a week, then framed the floor.</p>
+          <p>Every candle is poured in small batches, painted by hand with more enthusiasm than restraint, and named after the mood it was painted in.</p>
+        </div>
+        <div>
+          <p>No two are alike, because our hands shake slightly when we're excited, and we are always excited.</p>
+          <p>The paintings in the shop are made the honest way: we burn our own candles, let them collapse onto canvas, and sign whatever gravity decides.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="world-section" aria-labelledby="contact-h">
+      <h2 id="contact-h">commission a <span class="paint-word">mess</span></h2>
+      <p class="lede">Want a custom candle, a custom crash, or both? Tell us the colors you dream in.</p>
+      <form action="mailto:hello@candlesnart.com" method="post" enctype="text/plain">
+        <label>your name <input type="text" name="name" autocomplete="name" required></label>
+        <label>your email <input type="email" name="email" autocomplete="email" required></label>
+        <label>the mess you have in mind <textarea name="message" required></textarea></label>
+        <div><button class="btn" type="submit">send it flying</button></div>
+      </form>
+    </section>
+
+    <section id="finale" class="world-section" aria-labelledby="finale-h">
+      <svg id="miniCandle" viewBox="0 0 120 160" aria-hidden="true" focusable="false">
+        <g id="mcPieces">
+          <rect class="mcP" x="42" y="60" width="36" height="34" rx="6" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/>
+          <rect class="mcP" x="42" y="94" width="36" height="34" rx="6" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/>
+          <rect class="mcP" x="42" y="128" width="36" height="18" rx="6" fill="#EFE3CE" stroke="#1C1A17" stroke-width="3"/>
+          <path class="mcStroke" d="M52 70 C56 90 50 112 56 134" stroke="#FF2E88" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <path class="mcStroke" d="M68 66 C64 92 70 114 66 138" stroke="#00D4D8" stroke-width="6" fill="none" stroke-linecap="round"/>
+        </g>
+        <path id="mcWick" d="M60 52 q3 5 1 10" stroke="#1C1A17" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path id="mcFlame" d="M60 26 C68 36 70 46 65 54 C62 59 58 59 55 54 C50 46 52 35 60 26 Z" fill="#FFB03A" opacity="0"/>
+      </svg>
+      <h2 id="finale-h">make your own <span class="paint-word">mess</span></h2>
+      <div><button class="btn" id="messBtn" type="button">relight the candle</button></div>
+      <p class="again">or scroll back up and drop it all over again. we won't judge. we'll cheer.</p>
+    </section>
+
+    <footer>
+      <svg class="wave" viewBox="0 0 1200 40" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 30 C100 10 200 34 300 22 C400 10 500 32 600 20 C700 8 800 34 900 24 C1000 14 1100 30 1200 18 L1200 40 L0 40 Z" fill="currentColor" opacity=".12"/>
+      </svg>
+      <p>Candlesnart — poured, painted, and occasionally dropped. © 2026.<br>No candles were harmed that didn't secretly want to be paintings.</p>
+    </footer>
+  </div>
+
+
+</main>
+
+<canvas id="paint" aria-hidden="true"></canvas>
+<div id="flash" aria-hidden="true"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.14/dist/lenis.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.19.0/build/matter.min.js" defer></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+
+/* ============================================================
+   0. MODE GATES
+   ============================================================ */
+const html = document.documentElement;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const isMobile = matchMedia('(max-width: 768px)').matches;
+
+const PALETTE = ['#FF2E88', '#00D4D8', '#FFE03D', '#5B2A86', '#FFB03A'];
+const $  = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+// Painted-vector product art (placeholder until real photos exist).
+function candleArtSVG(color, multi) {
+  const strokes = multi
+    ? PALETTE.map((c, i) => `<path d="M${34 + i * 12} 30 C${38 + i * 12} 55 ${30 + i * 12} 80 ${36 + i * 12} 104" stroke="${c}" stroke-width="8" fill="none" stroke-linecap="round"/>`).join('')
+    : `<path d="M40 32 C46 58 36 82 44 106" stroke="${color}" stroke-width="10" fill="none" stroke-linecap="round"/>
+       <path d="M62 28 C56 56 66 84 58 108" stroke="${color}" stroke-width="9" fill="none" stroke-linecap="round" opacity=".75"/>
+       <path d="M80 34 C86 60 76 84 84 104" stroke="${color}" stroke-width="7" fill="none" stroke-linecap="round" opacity=".55"/>`;
+  return `<svg viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <rect width="160" height="120" fill="#EFE3CE"/>
+    <ellipse cx="62" cy="108" rx="46" ry="8" fill="#E2D3B4"/>
+    <path d="M28 26 C25 52 31 78 27 104 L96 106 C100 76 94 52 98 28 C74 20 50 20 28 26 Z" fill="#F7EEDC" stroke="#1C1A17" stroke-width="3"/>
+    <g clip-path="inset(0)" >${strokes}</g>
+    <path d="M61 14 q3 5 1 10" stroke="#1C1A17" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+    <circle cx="128" cy="86" r="14" fill="${color}" opacity=".9"/>
+    <circle cx="142" cy="70" r="7" fill="${color}" opacity=".6"/>
+  </svg>`;
+}
+$$('.card').forEach(card => {
+  card.querySelector('.art').innerHTML = candleArtSVG(card.dataset.color, card.dataset.multi);
+});
+
+// Fake cart with a little joy.
+let cartN = 0;
+$$('.add').forEach(b => b.addEventListener('click', () => {
+  cartN++;
+  b.textContent = `in cart ×${cartN > 1 ? cartN : 1} — nice`;
+  b.style.background = 'var(--accent)';
+  setTimeout(() => { b.textContent = 'add one more'; }, 1400);
+}));
+
+const libsOK = window.gsap && window.ScrollTrigger && window.Lenis;
+
+if (reduced || !libsOK) {
+  // Storyboard world: the story as stills, everything readable, nothing moves.
+  if (!libsOK && !reduced) html.classList.add('fallback');
+  html.dataset.world = 'color';
+  html.classList.add('loaded');
+  return;
+}
+
+gsap.registerPlugin(ScrollTrigger);
+
+/* ============================================================
+   1. SMOOTH SCROLL (Lenis) — native touch is never hijacked
+   ============================================================ */
+const lenis = new Lenis({ autoRaf: false, lerp: 0.1 });
+lenis.on('scroll', ScrollTrigger.update);
+gsap.ticker.add(t => lenis.raf(t * 1000));
+gsap.ticker.lagSmoothing(0);
+lenis.stop(); // locked until the match strikes
+
+const LENIS_DEFAULTS = { wheel: 1, touch: 2, lerp: 0.1 };
+
+/* ============================================================
+   2. SOUND (synthesized, muted by default, obvious toggle)
+   ============================================================ */
+const Sound = (() => {
+  let ctx = null, on = false;
+  const ac = () => (ctx ||= new (window.AudioContext || window.webkitAudioContext)());
+  function noiseBuf(sec) {
+    const c = ac(), b = c.createBuffer(1, c.sampleRate * sec, c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  function noise(sec, type, freq, q, gain, sweepTo) {
+    const c = ac(), src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+    src.buffer = noiseBuf(sec); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, c.currentTime + sec);
+    g.gain.setValueAtTime(gain, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + sec);
+    src.connect(f).connect(g).connect(c.destination); src.start();
+  }
+  function tone(f0, f1, sec, gain, type = 'sine') {
+    const c = ac(), o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, c.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f1, c.currentTime + sec);
+    g.gain.setValueAtTime(gain, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + sec);
+    o.connect(g).connect(c.destination); o.start(); o.stop(c.currentTime + sec);
+  }
+  return {
+    get on() { return on; },
+    toggle() { on = !on; if (on) { ac().resume(); this.strike(); } return on; },
+    strike() { if (!on) return; noise(0.22, 'bandpass', 2400, 2, 0.5, 700); noise(0.4, 'highpass', 4000, 1, 0.12); },
+    drip()   { if (!on) return; tone(680, 180, 0.14, 0.25); },
+    whoosh() { if (!on) return; noise(0.9, 'lowpass', 1200, 1, 0.4, 120); },
+    splat()  { if (!on) return; noise(0.16, 'lowpass', 900, 1, 0.9, 100); tone(120, 40, 0.28, 0.7); noise(0.5, 'bandpass', 500, 3, 0.2, 90); }
+  };
+})();
+const soundBtn = $('#soundToggle');
+soundBtn.addEventListener('click', () => {
+  soundBtn.setAttribute('aria-pressed', String(Sound.toggle()));
+});
+
+/* ============================================================
+   3. LOADER — a match strike, under 1.2s, then unlock scroll
+   ============================================================ */
+(function loader() {
+  const tl = gsap.timeline({
+    onComplete() {
+      gsap.to('#loader', {
+        opacity: 0, duration: 0.25, onComplete() {
+          html.classList.add('loaded');
+          lenis.start();
+        }
+      });
+    }
+  });
+  tl.fromTo('#matchG', { x: -120 }, { x: 0, duration: 0.35, ease: 'power2.in' })
+    .to('#matchG', { x: 26, duration: 0.12, ease: 'power4.in' })
+    .to('#matchSpark', { opacity: 1, scale: 3, transformOrigin: 'center', duration: 0.08 }, '<')
+    .to('#matchSpark', { opacity: 0, duration: 0.1 })
+    .fromTo('#matchFlame', { opacity: 0, scale: 0, transformOrigin: '50% 100%' },
+      { opacity: 1, scale: 1, duration: 0.22, ease: 'back.out(2.5)' }, '-=0.06')
+    .to({}, { duration: 0.25 });
+})();
+
+/* ============================================================
+   4. THE MASTER TIMELINE — Acts I–VI, one scrubbed story
+   Timeline runs 0..100 units mapped to pin progress.
+   ============================================================ */
+if (isMobile) $('#stage-wrap').style.height = '560vh';
+
+const tl = gsap.timeline({ defaults: { ease: 'none' } });
+
+/* ---- ACT I: STILL LIFE (0–12) ---- */
+gsap.set('#copy-1', { opacity: 1 });
+tl.to('#copy-1', { opacity: 0, y: -60, duration: 4, ease: 'power1.in' }, 8);
+
+/* idle breathing — real time, not scrubbed (nothing is ever perfectly still) */
+gsap.to('#candleWobble', { rotation: 0.5, svgOrigin: '502 688', duration: 3.4, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+gsap.to('#scrollCue', { y: 7, duration: 0.9, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+
+/* ---- ACT II: THE LIGHT (12–28) ---- */
+tl.to('#ember', { opacity: 1, duration: 1 }, 12)
+  .fromTo('#flameG', { opacity: 0 }, { opacity: 1, duration: 0.8 }, 13)
+  .fromTo('#flameStretch', { scale: 0, svgOrigin: '504 396' }, { scale: 1, duration: 2.2, ease: 'back.out(2)' }, 13)
+  .fromTo('#flare', { opacity: 0, scale: 0.1, svgOrigin: '504 380' }, { opacity: 0.75, scale: 1, duration: 1.4, ease: 'power2.out' }, 13.2)
+  .to('#flare', { opacity: 0, scale: 1.5, duration: 2.4 }, 14.8)
+  .to('#tableLight', { opacity: 1, duration: 6 }, 14)
+  .to('#vignette', { opacity: 0.25, duration: 8 }, 14)
+  .fromTo('#copy-2', { opacity: 0 }, { opacity: 1, duration: 1 }, 16)
+  .fromTo('#copy-2 .w', { y: 50, opacity: 0, rotation: 4 }, { y: 0, opacity: 1, rotation: 0, duration: 3, stagger: 0.45, ease: 'power2.out' }, 16)
+  .to('#copy-2', { opacity: 0, y: -40, duration: 2.5, ease: 'power1.in' }, 25);
+
+/* ---- ACT III: THE MELT (28–45) ---- */
+gsap.set(['.drip', '.droplet'], { scaleY: 0, transformOrigin: '50% 0%' });
+gsap.set('.pool', { scale: 0, transformOrigin: '50% 100%' });
+
+tl.to('#camScale', { scale: 1.55, svgOrigin: '500 470', duration: 8, ease: 'power1.inOut' }, 28)
+  .to('#rim', { scaleY: 1.6, scaleX: 1.06, svgOrigin: '504 427', duration: 8 }, 29)
+  // drip 1: forms, hesitates, then runs
+  .to('.d1', { scaleY: 0.35, duration: 2, ease: 'power1.out' }, 30)
+  .to('.d1', { scaleY: 0.42, duration: 2 }, 32)                    // the hesitation
+  .to('.d1', { scaleY: 1, duration: 2.5, ease: 'power2.in' }, 34)  // the run
+  .fromTo('.dd1', { scaleY: 0, y: -80 }, { scaleY: 1, y: 160, duration: 3, ease: 'power2.in' }, 35.5)
+  // drip 2
+  .to('.d2', { scaleY: 0.4, duration: 2.5, ease: 'power1.out' }, 36)
+  .to('.d2', { scaleY: 1, duration: 2.5, ease: 'power2.in' }, 39)
+  .fromTo('.dd2', { scaleY: 0, y: -70 }, { scaleY: 1, y: 168, duration: 3, ease: 'power2.in' }, 40)
+  // the pool grows, goo merges it
+  .to('.pool', { scale: 1, duration: 7, stagger: 1.4, ease: 'power1.out' }, 34)
+  // foreshadowing: color bleeds inside the wax ONLY
+  .to('#foreshadow', { opacity: 0.34, duration: 5 }, 39)
+  .fromTo('#copy-3', { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 3 }, 30)
+  .to('#copy-3', { opacity: 0, x: 40, duration: 2.5 }, 42);
+
+/* ---- ACT IV: THE TIP (45–58) — the resistance beat ---- */
+const EDGE_PAN = isMobile ? -190 : -60; // camera follows the candle to the edge
+tl.to('#camScale', { scale: 1.18, svgOrigin: '500 470', duration: 5, ease: 'power1.inOut' }, 45)
+  .to('#camPan', { x: EDGE_PAN, duration: 9, ease: 'power1.inOut' }, 47)
+  .to('#poolG', { opacity: 0, duration: 2 }, 46)
+  // the nudge (it was you)
+  .to('#camPan', { keyframes: [{ x: -9, duration: 0.3 }, { x: 6, duration: 0.3 }, { x: 0, duration: 0.4 }] }, 45.5)
+  // rocking, growing
+  .to('#candleRock', {
+    svgOrigin: '502 688',
+    keyframes: [
+      { rotation: -2.5, duration: 1 }, { rotation: 3.5, duration: 1 },
+      { rotation: -5, duration: 1 }, { rotation: 6.5, duration: 1 },
+      { rotation: -7.5, duration: 1 }, { rotation: 5, duration: 1 },
+      { rotation: 0, duration: 2 }
+    ]
+  }, 46)
+  // scooting to the table edge
+  .to('#candleFall', { x: 255, duration: 9, ease: 'power1.inOut' }, 47)
+  .to('#candleShadow', { scaleX: 0.8, opacity: 0.3, svgOrigin: '502 712', duration: 9 }, 47)
+  // the teeter: hesitating on the corner
+  .to('#candleTip', {
+    svgOrigin: '552 688',
+    keyframes: [
+      { rotation: 9, duration: 0.8 }, { rotation: 6, duration: 0.6 },
+      { rotation: 14, duration: 0.8 }, { rotation: 10, duration: 0.6 },
+      { rotation: 18, duration: 0.7 }, { rotation: 26, duration: 0.5 }
+    ]
+  }, 54)
+  .to('#flameG', { rotation: -26, svgOrigin: '504 415', duration: 4 }, 54)
+  .fromTo('#copy-4', { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 2 }, 49)
+  .to('#copy-4', { opacity: 0, duration: 1.5 }, 56.5);
+
+/* ---- ACT V: THE FALL (58–72) — dreamlike, slow, silent ---- */
+tl.to('#candleTip', { rotation: 104, svgOrigin: '552 688', duration: 14, ease: 'power1.in' }, 58)
+  .to('#camScale', { scale: 1, svgOrigin: '500 470', duration: 8 }, 58)
+  .to('#candleFall', { x: 330, duration: 14 }, 58)
+  .to('#candleFall', { y: 880, duration: 14, ease: 'power1.in' }, 58)
+  .to('#candleShadow', { opacity: 0, duration: 1 }, 58)
+  .to('#camPan', { x: -250, duration: 13, ease: 'power1.inOut' }, 58.5)
+  .to('#camPan', { y: -780, duration: 13.4, ease: 'power1.in' }, 58.6)
+  .to('#stageBg', { backgroundColor: '#12100D', duration: 11 }, 59.5)
+  .to('#vignette', { opacity: 0.9, duration: 10 }, 60)
+  .to('#flameG', { rotation: -104, svgOrigin: '504 415', duration: 14 }, 58)
+  .to('#flameStretch', { scaleY: 2.3, scaleX: 0.72, svgOrigin: '504 396', duration: 12 }, 60)
+  .to('#tableLight', { opacity: 0, duration: 6 }, 60);
+
+$$('.dropT').forEach((d, i) => {
+  tl.fromTo(d, { opacity: 0, y: -60 }, { opacity: 0.9, y: 40, duration: 4 }, 61 + i * 2)
+    .to(d, { opacity: 0, y: 90, duration: 3 }, 65 + i * 2);
+});
+
+/* ---- ACT VI: IMPACT (72–78) — handled by detonate(); tl hides the scene ---- */
+tl.to('#scene', { opacity: 0, duration: 0.4 }, 72)
+  .to('#stageBg', { opacity: 0, duration: 0.4 }, 72)  // the dark room becomes the bright painted world
+  .to('#vignette', { opacity: 0, duration: 1 }, 72)
+  .fromTo('#copy-6', { opacity: 0 }, { opacity: 1, duration: 0.5 }, 73)
+  .fromTo('#copy-6 .w',
+    { scale: 2.2, opacity: 0, rotation: () => gsap.utils.random(-14, 14) },
+    { scale: 1, opacity: 1, rotation: 0, duration: 2.2, stagger: 0.5, ease: 'power3.out' }, 73.2)
+  /* ---- SETTLE (78–100) ---- */
+  .to('#copy-6 .after-cue', { opacity: 0.7, duration: 2 }, 82)
+  .to('#copy-6', { opacity: 0, y: -80, duration: 6, ease: 'power1.in' }, 92)
+  .to({}, { duration: 1 }, 99); // hold the pin to 100
+
+/* ============================================================
+   5. PIN + SCRUB + ACT IV SCROLL RESISTANCE + SOUND CUES
+   The stickiness is real: inside the tipping zone we choke the
+   wheel/touch multipliers and slow the lerp so the user has to
+   physically push the candle over the edge.
+   ============================================================ */
+const REZ = { start: 0.47, peak: 0.555, end: 0.585 };
+let detonated = false;
+
+const soundCues = [
+  { p: 0.135, fn: () => Sound.strike() },
+  { p: 0.36,  fn: () => Sound.drip() },
+  { p: 0.415, fn: () => Sound.drip() },
+  { p: 0.585, fn: () => Sound.whoosh() }
+];
+let lastP = 0;
+
+const mainST = ScrollTrigger.create({
+  trigger: '#stage-wrap',
+  start: 'top top',
+  end: 'bottom bottom',
+  scrub: 0.4,
+  animation: tl,
+  onUpdate(self) {
+    const p = self.progress;
+
+    // --- tip resistance ---
+    if (p > REZ.start && p < REZ.end && !isMobile) {
+      const t = p < REZ.peak
+        ? (p - REZ.start) / (REZ.peak - REZ.start)      // ramping up to the balance point
+        : 1 - (p - REZ.peak) / (REZ.end - REZ.peak) * 0.6; // easing off once it's going
+      lenis.options.wheelMultiplier = 1 - 0.74 * t;
+      lenis.options.touchMultiplier = LENIS_DEFAULTS.touch * (1 - 0.55 * t);
+      lenis.options.lerp = LENIS_DEFAULTS.lerp - 0.062 * t;
+    } else {
+      lenis.options.wheelMultiplier = LENIS_DEFAULTS.wheel;
+      lenis.options.touchMultiplier = LENIS_DEFAULTS.touch;
+      lenis.options.lerp = LENIS_DEFAULTS.lerp;
+    }
+
+    // --- sound cues (forward crossings only) ---
+    for (const c of soundCues) if (lastP < c.p && p >= c.p) c.fn();
+    lastP = p;
+
+    // --- impact, with hysteresis so scrubbing near the line can't flicker ---
+    if (p >= 0.72 && !detonated) detonate();
+    else if (p < 0.695 && detonated) undetonate();
+  }
+});
+
+/* ============================================================
+   6. FLAME FLICKER + SCROLL-VELOCITY EFFECTS (real time)
+   ============================================================ */
+const flicker = { t: 0 };
+gsap.ticker.add((time, dt) => {
+  if (!mainST.isActive || detonated) return;
+  const p = mainST.progress;
+  if (p < 0.12 || p > 0.73) return;
+  flicker.t += dt / 1000;
+  const t = flicker.t;
+  const n1 = Math.sin(t * 9.1) * 0.5 + Math.sin(t * 15.7 + 2) * 0.3 + Math.sin(t * 27.3 + 5) * 0.2;
+  const n2 = Math.sin(t * 11.3 + 1) * 0.5 + Math.sin(t * 19.9 + 4) * 0.5;
+  const vel = gsap.utils.clamp(-60, 60, lenis.velocity);
+  gsap.set('#flameInner', {
+    svgOrigin: '504 396',
+    scaleY: 1 + n1 * 0.09 + Math.abs(vel) * 0.004,
+    scaleX: 1 - n1 * 0.05,
+    skewX: n2 * 2.4 - vel * 0.22,
+    rotation: n2 * 1.5
+  });
+  gsap.set('#glow', { opacity: 0.8 + n1 * 0.2, svgOrigin: '504 382', scale: 1 + n2 * 0.05 });
+});
+
+/* kinetic display type: headlines physically react to scroll speed */
+const kinetics = $$('.kinetic');
+kinetics.forEach(el => {
+  const t = getComputedStyle(el).transform;
+  el.dataset.baseT = t === 'none' ? '' : t; // keep the hand-placed tilt underneath
+});
+let kineticIdle = true;
+gsap.ticker.add(() => {
+  const vel = gsap.utils.clamp(-90, 90, lenis.velocity);
+  if (Math.abs(vel) < 0.5) {
+    if (kineticIdle) return;
+    kineticIdle = true;
+    for (const el of kinetics) el.style.transform = el.dataset.baseT;
+    return;
+  }
+  kineticIdle = false;
+  const sk = vel * 0.045, sc = 1 + Math.min(Math.abs(vel) * 0.0012, 0.1);
+  for (const el of kinetics) {
+    el.style.transform = `skewY(${sk * 0.14}deg) scaleY(${sc}) ` + el.dataset.baseT;
+  }
+});
+
+/* ============================================================
+   7. THE SPLATTER — canvas particles + Matter.js debris.
+   Live spray on #paint (over everything), settled paint
+   stamped permanently onto #stains (behind everything).
+   ============================================================ */
+const paintCv = $('#paint'), pctx = paintCv.getContext('2d');
+const stainCv = $('#stains'), sctx = stainCv.getContext('2d');
+const DPR = Math.min(devicePixelRatio || 1, 1.75);
+
+function sizeCanvases() {
+  for (const c of [paintCv, stainCv]) {
+    const keep = c === stainCv ? sctx.getImageData(0, 0, c.width || 1, c.height || 1) : null;
+    c.width = innerWidth * DPR; c.height = innerHeight * DPR;
+    c.getContext('2d').setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (keep && detonated && c === stainCv) sctx.putImageData(keep, 0, 0);
+  }
+}
+sizeCanvases();
+addEventListener('resize', sizeCanvases);
+
+let particles = [], debris = [], mEngine = null;
+const MAXP = isMobile ? 130 : 340;
+
+function blobStamp(ctx, x, y, r, color, alpha = 1) {
+  // wobbly radii joined by quadratic curves through midpoints = wet paint, not confetti
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  const k = 9, pts = [];
+  for (let i = 0; i < k; i++) {
+    const a = (i / k) * Math.PI * 2;
+    const rr = r * (0.82 + Math.sin(a * 3 + x * 0.7 + y) * 0.16 + Math.cos(a * 4 + x) * 0.09);
+    pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr]);
+  }
+  ctx.beginPath();
+  ctx.moveTo((pts[0][0] + pts[k - 1][0]) / 2, (pts[0][1] + pts[k - 1][1]) / 2);
+  for (let i = 0; i < k; i++) {
+    const n = pts[(i + 1) % k];
+    ctx.quadraticCurveTo(pts[i][0], pts[i][1], (pts[i][0] + n[0]) / 2, (pts[i][1] + n[1]) / 2);
+  }
+  ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+}
+
+function spawnSplatter(x, y) {
+  particles.length = 0;
+  const floorY = Math.min(y + 30, innerHeight - 20);
+  for (let i = 0; i < MAXP; i++) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.7;
+    const sp = 380 + Math.random() * 1150;
+    particles.push({
+      x, y: y - 6,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      r: 2 + Math.random() * (Math.random() < 0.12 ? 16 : 7),
+      color: PALETTE[i % PALETTE.length],
+      floorY: floorY - Math.pow(Math.random(), 2.2) * 110, // ragged settle line, not a ruler
+
+      dead: false
+    });
+  }
+  // Matter.js: the chunky wax debris that tumbles and bounces
+  const { Engine, Bodies, Composite } = Matter;
+  mEngine = Engine.create({ gravity: { x: 0, y: 1.4 } });
+  const ground = Bodies.rectangle(innerWidth / 2, floorY + 24, innerWidth * 2, 60, { isStatic: true });
+  const wl = Bodies.rectangle(-20, innerHeight / 2, 40, innerHeight * 2, { isStatic: true });
+  const wr = Bodies.rectangle(innerWidth + 20, innerHeight / 2, 40, innerHeight * 2, { isStatic: true });
+  debris = [];
+  const n = isMobile ? 6 : 13;
+  for (let i = 0; i < n; i++) {
+    const r = 9 + Math.random() * 17;
+    const b = Bodies.circle(x + gsap.utils.random(-8, 8), y - 10, r, { restitution: 0.55, friction: 0.4 });
+    Matter.Body.setVelocity(b, { x: gsap.utils.random(-14, 14), y: gsap.utils.random(-22, -7) });
+    Matter.Body.setAngularVelocity(b, gsap.utils.random(-0.4, 0.4));
+    b.plugin = { r, color: PALETTE[(i + 2) % PALETTE.length], settleAt: 0 };
+    debris.push(b);
+    Composite.add(mEngine.world, b);
+  }
+  Composite.add(mEngine.world, [ground, wl, wr]);
+}
+
+/* the settled composition: designed blobs first, chaos on top */
+function stampComposition(x, y) {
+  const w = innerWidth, h = innerHeight;
+  const spots = [
+    [x, Math.min(y, h * 0.86), Math.min(w, h) * 0.17, PALETTE[0]],
+    [x - w * 0.22, h * 0.9, 70, PALETTE[1]],
+    [x + w * 0.14, h * 0.94, 90, PALETTE[2]],
+    [x - w * 0.38, h * 0.82, 46, PALETTE[3]],
+    [w * 0.12, h * 0.2, 34, PALETTE[1]],
+    [w * 0.85, h * 0.16, 28, PALETTE[0]],
+    [w * 0.5, h * 0.06, 22, PALETTE[4]],
+    [w * 0.06, h * 0.6, 26, PALETTE[2]],
+    [w * 0.95, h * 0.55, 30, PALETTE[3]]
+  ];
+  spots.forEach(([sx, sy, r, c], i) => {
+    gsap.delayedCall(i * 0.05, () => {
+      if (!detonated) return;
+      blobStamp(sctx, sx, sy, r, c, 0.95);
+      for (let j = 0; j < 5; j++)
+        blobStamp(sctx, sx + gsap.utils.random(-r * 2.4, r * 2.4), sy + gsap.utils.random(-r * 1.6, r * 1.2), gsap.utils.random(2, 7), c, 0.85);
+    });
+  });
+}
+
+/* particle physics loop — self-terminating, restarted on demand */
+let paintLoopOn = false;
+function ensurePaintLoop() { if (!paintLoopOn) { paintLoopOn = true; requestAnimationFrame(paintLoop); } }
+function paintLoop(now) {
+  const dt = 1 / 60;
+  pctx.clearRect(0, 0, innerWidth, innerHeight);
+  let alive = false;
+
+  if (mEngine) {
+    Matter.Engine.update(mEngine, dt * 1000);
+    let allSettled = true;
+    for (const b of debris) {
+      blobStamp(pctx, b.position.x, b.position.y, b.plugin.r, b.plugin.color);
+      if (Math.abs(b.velocity.y) > 0.4 || Math.abs(b.velocity.x) > 0.4) allSettled = false;
+    }
+    if (allSettled) {
+      for (const b of debris) blobStamp(sctx, b.position.x, b.position.y, b.plugin.r, b.plugin.color);
+      debris = []; mEngine = null;
+    } else alive = true;
+  }
+
+  for (const p of particles) {
+    if (p.dead) continue;
+    p.vy += 2600 * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.y >= p.floorY || p.x < -30 || p.x > innerWidth + 30 || p.y > innerHeight + 30) {
+      const sx = gsap.utils.clamp(6, innerWidth - 6, p.x);
+      const sy = Math.min(p.y, p.floorY);
+      blobStamp(sctx, sx, sy, p.r * (1 + Math.random()), p.color, 0.92);
+      if (p.r > 6) for (let j = 0; j < 3; j++)
+        blobStamp(sctx, sx + gsap.utils.random(-30, 30), sy + gsap.utils.random(-8, 14), gsap.utils.random(1.5, 4), p.color, 0.8);
+      p.dead = true; continue;
+    }
+    alive = true;
+    const stretch = Math.min(Math.abs(p.vy) * 0.0012, 1.6);
+    pctx.fillStyle = p.color;
+    pctx.beginPath();
+    pctx.ellipse(p.x, p.y, p.r, p.r * (1 + stretch), Math.atan2(p.vy, p.vx) + Math.PI / 2, 0, Math.PI * 2);
+    pctx.fill();
+  }
+
+  drawHeroBlobs();
+  if (alive || heroActive()) requestAnimationFrame(paintLoop);
+  else { paintLoopOn = false; pctx.clearRect(0, 0, innerWidth, innerHeight); }
+}
+
+/* ============================================================
+   8. IMPACT — one white frame, shake, world inversion
+   ============================================================ */
+function impactXY() {
+  const r = $('#impactPoint').getBoundingClientRect();
+  return { x: gsap.utils.clamp(60, innerWidth - 60, r.x), y: gsap.utils.clamp(innerHeight * 0.5, innerHeight * 0.92, r.y) };
+}
+
+function detonate() {
+  detonated = true;
+  const { x, y } = impactXY();
+
+  html.dataset.world = 'color';                       // the single-frame inversion
+
+  // one hard frame of white
+  gsap.fromTo('#flash', { opacity: 1 }, { opacity: 0, duration: 0.22, ease: 'power3.in', delay: 0.04 });
+
+  // screen shake, decaying
+  gsap.fromTo('#stage', { x: 0, y: 0 }, {
+    keyframes: [
+      { x: -22, y: 12, duration: 0.05 }, { x: 18, y: -10, duration: 0.05 },
+      { x: -13, y: -7, duration: 0.05 }, { x: 9, y: 6, duration: 0.06 },
+      { x: -5, y: -3, duration: 0.07 }, { x: 0, y: 0, duration: 0.1 }
+    ]
+  });
+
+  Sound.splat();
+  spawnSplatter(x, y);
+  stampComposition(x, y);
+  seedHeroBlobs(x, y);
+  ensurePaintLoop();
+}
+
+function undetonate() {
+  detonated = false;
+  html.dataset.world = 'mono';
+  particles.length = 0; debris = []; mEngine = null;
+  heroes.length = 0;
+  sctx.clearRect(0, 0, innerWidth, innerHeight);
+  pctx.clearRect(0, 0, innerWidth, innerHeight);
+  cards.forEach(c => {
+    c.classList.remove('placed');
+    c.style.opacity = c.style.transform = c.style.transition = '';
+  });
+}
+
+/* ============================================================
+   9. SPLATTER → GRID: paint puddles resolve into product cards
+   ============================================================ */
+const cards = $$('#cardGrid .card');
+let heroes = [];
+
+function seedHeroBlobs(x, y) {
+  heroes = cards.map((card, i) => ({
+    card,
+    color: card.dataset.color,
+    x0: gsap.utils.clamp(50, innerWidth - 50, x + (i - 2.5) * (innerWidth * 0.13) + gsap.utils.random(-30, 30)),
+    y0: Math.min(y + gsap.utils.random(-10, 30), innerHeight - 40),
+    r0: gsap.utils.random(34, 60),
+    p: 0, wob: Math.random() * 10
+  }));
+}
+
+let shopProg = 0;
+ScrollTrigger.create({
+  trigger: '#shop',
+  start: 'top 92%',
+  end: 'top 18%',
+  scrub: true,
+  onUpdate(self) { shopProg = self.progress; ensurePaintLoop(); }
+});
+
+function heroActive() { return detonated && heroes.length && shopProg > 0 && shopProg < 1; }
+
+function drawHeroBlobs() {
+  if (!detonated || !heroes.length) { if (!detonated) cards.forEach(c => c.style.opacity = ''); return; }
+  const ease = gsap.parseEase('power2.inOut');
+  heroes.forEach((h, i) => {
+    const pi = gsap.utils.clamp(0, 1, (shopProg - i * 0.07) / 0.62);
+    h.p = pi;
+    const rect = h.card.getBoundingClientRect();
+    const cx = rect.x + rect.width / 2, cy = rect.y + rect.height / 2;
+    const onScreen = cy > -200 && cy < innerHeight + 200;
+
+    // card reveal: the puddle becomes the frame
+    const reveal = gsap.utils.clamp(0, 1, (pi - 0.55) / 0.45);
+    if (reveal >= 1) {
+      // hand the card back to CSS so hover-melt and focus styles work
+      if (!h.card.classList.contains('placed')) {
+        h.card.classList.add('placed');
+        h.card.style.opacity = h.card.style.transform = h.card.style.transition = '';
+      }
+    } else {
+      h.card.classList.remove('placed');
+      h.card.style.transition = 'none';
+      h.card.style.opacity = reveal;
+      h.card.style.transform = `rotate(var(--tilt,0deg)) scale(${0.72 + 0.28 * ease(reveal)})`;
+    }
+
+    if (pi <= 0 || pi >= 1 || !onScreen) return;
+    const t = ease(pi);
+    const bx = h.x0 + (cx - h.x0) * t;
+    const by = h.y0 + (cy - h.y0) * t - Math.sin(t * Math.PI) * 120; // arcs up out of the puddle
+    const br = h.r0 * (1 + t * 1.6) * (1 - reveal);
+    if (br > 1) {
+      h.wob += 0.08;
+      blobStamp(pctx, bx + Math.sin(h.wob) * 4, by, br, h.color, 0.95);
+    }
+  });
+}
+
+/* while heroes idle before the shop arrives, they read as settled paint (already stamped) */
+
+/* ============================================================
+   10. PLAYPEN — draggable, flingable, gooey wax blobs
+   ============================================================ */
+(function playpen() {
+  const zone = $('#gooZone'), holder = $('#gooBlobs');
+  let engine = null, blobs = [], raf = null;
+
+  function build() {
+    if (engine) return;
+    const { Engine, Bodies, Composite, Mouse, MouseConstraint } = Matter;
+    const W = zone.clientWidth, H = zone.clientHeight;
+    engine = Engine.create({ gravity: { x: 0, y: 0.9 } });
+    const walls = [
+      Bodies.rectangle(W / 2, H + 30, W * 2, 60, { isStatic: true }),
+      Bodies.rectangle(W / 2, -30, W * 2, 60, { isStatic: true }),
+      Bodies.rectangle(-30, H / 2, 60, H * 2, { isStatic: true }),
+      Bodies.rectangle(W + 30, H / 2, 60, H * 2, { isStatic: true })
+    ];
+    const n = isMobile ? 5 : 7;
+    blobs = [];
+    for (let i = 0; i < n; i++) {
+      const r = gsap.utils.random(26, 48);
+      const b = Bodies.circle(gsap.utils.random(r, W - r), gsap.utils.random(r, H / 2), r, { restitution: 0.6, frictionAir: 0.02 });
+      const el = document.createElement('div');
+      el.className = 'blob';
+      el.style.width = el.style.height = r * 2 + 'px';
+      el.style.background = PALETTE[i % PALETTE.length];
+      holder.appendChild(el);
+      b.plugin = { el, r };
+      blobs.push(b);
+      Composite.add(engine.world, b);
+    }
+    Composite.add(engine.world, walls);
+
+    if (finePointer) {
+      const mouse = Mouse.create(zone);
+      const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.15, damping: 0.1 } });
+      Composite.add(engine.world, mc);
+      // never let the zone eat wheel scrolling
+      mouse.element.removeEventListener('mousewheel', mouse.mousewheel);
+      mouse.element.removeEventListener('DOMMouseScroll', mouse.mousewheel);
+    } else {
+      // touch: no drag constraint (never trap the scroll); blobs jiggle on their own
+      setInterval(() => {
+        if (!engine || document.hidden) return;
+        const b = blobs[(Math.random() * blobs.length) | 0];
+        Matter.Body.applyForce(b, b.position, { x: gsap.utils.random(-0.04, 0.04), y: gsap.utils.random(-0.06, -0.02) });
+      }, 1800);
+    }
+    tick();
+  }
+  function tick() {
+    Matter.Engine.update(engine, 1000 / 60);
+    for (const b of blobs) {
+      b.plugin.el.style.transform =
+        `translate(${b.position.x - b.plugin.r}px,${b.position.y - b.plugin.r}px) rotate(${b.angle}rad)`;
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  new IntersectionObserver(entries => {
+    for (const e of entries) {
+      if (e.isIntersecting) { build(); if (!raf && engine) tick(); }
+      else if (raf) { cancelAnimationFrame(raf); raf = null; }
+    }
+  }, { rootMargin: '100px' }).observe(zone);
+})();
+
+/* ============================================================
+   11. CURSOR — flame above the floor, paintbrush below it.
+   The brush leaves real strokes on the stains canvas.
+   ============================================================ */
+if (finePointer) {
+  html.classList.add('cursor-on');
+  const cur = $('#cursor');
+  gsap.set(cur, { x: -100, y: -100 }); // offscreen until the pointer shows up
+  const cx = gsap.quickTo(cur, 'x', { duration: 0.18, ease: 'power2.out' });
+  const cy = gsap.quickTo(cur, 'y', { duration: 0.18, ease: 'power2.out' });
+  let lastX = -1, lastY = -1, hue = 0;
+  addEventListener('mousemove', e => {
+    cx(e.clientX); cy(e.clientY);
+    if (html.dataset.world === 'color' && !mainST.isActive) {
+      if (lastX >= 0) {
+        const d = Math.hypot(e.clientX - lastX, e.clientY - lastY);
+        const steps = Math.min(Math.ceil(d / 7), 8);
+        hue += d * 0.01;
+        const color = PALETTE[Math.floor(hue) % PALETTE.length];
+        for (let i = 1; i <= steps; i++) {
+          const ix = lastX + (e.clientX - lastX) * (i / steps);
+          const iy = lastY + (e.clientY - lastY) * (i / steps);
+          sctx.globalAlpha = 0.35;
+          sctx.fillStyle = color;
+          sctx.beginPath();
+          sctx.ellipse(ix, iy, 3 + Math.min(d * 0.14, 9), 2 + Math.min(d * 0.1, 6), Math.atan2(e.clientY - lastY, e.clientX - lastX), 0, Math.PI * 2);
+          sctx.fill();
+          sctx.globalAlpha = 1;
+        }
+      }
+      lastX = e.clientX; lastY = e.clientY;
+    } else { lastX = lastY = -1; }
+  }, { passive: true });
+
+  $$('a,button,input,textarea,.card').forEach(el => {
+    el.addEventListener('mouseenter', () => gsap.to(cur, { scale: 1.6, duration: 0.2 }));
+    el.addEventListener('mouseleave', () => gsap.to(cur, { scale: 1, duration: 0.2 }));
+  });
+}
+
+/* ============================================================
+   12. FINALE — the candle reassembles and relights
+   ============================================================ */
+(function finale() {
+  const pieces = $$('.mcP'), strokes = $$('.mcStroke');
+  const scatter = () => {
+    gsap.set(pieces, {
+      x: i => [-70, 60, -30][i], y: i => [-40, 30, 60][i],
+      rotation: i => [-50, 40, 90][i], opacity: 0.4, transformOrigin: '50% 50%'
+    });
+    gsap.set(strokes, { opacity: 0 });
+    gsap.set('#mcFlame', { opacity: 0, scale: 0, svgOrigin: '60 56' });
+    gsap.set('#mcWick', { opacity: 0 });
+  };
+  scatter();
+  ScrollTrigger.create({ trigger: '#finale', start: 'top 70%', onEnter: reassemble });
+  $('#messBtn').addEventListener('click', () => {
+    const r = $('#messBtn').getBoundingClientRect();
+    spawnSplatter(r.x + r.width / 2, r.y);
+    ensurePaintLoop();
+    Sound.splat();
+    scatter();
+    gsap.delayedCall(0.5, reassemble);
+  });
+  function reassemble() {
+    gsap.timeline()
+      .to(pieces, { x: 0, y: 0, rotation: 0, opacity: 1, duration: 0.9, stagger: 0.12, ease: 'back.out(1.6)' })
+      .to(strokes, { opacity: 1, duration: 0.5 }, '-=0.3')
+      .to('#mcWick', { opacity: 1, duration: 0.2 })
+      .to('#mcFlame', { opacity: 1, scale: 1, duration: 0.5, ease: 'back.out(3)' })
+      .to('#mcFlame', { scaleY: 1.12, svgOrigin: '60 56', duration: 0.5, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+  }
+})();
+
+/* ============================================================
+   13. ANCHORS + housekeeping
+   ============================================================ */
+$('#homeLink').addEventListener('click', e => { e.preventDefault(); lenis.scrollTo(0, { duration: 1.4 }); });
+document.querySelector('.skip').addEventListener('click', e => {
+  e.preventDefault();
+  lenis.scrollTo('#shop', { immediate: true });
+  $('#shop-h').setAttribute('tabindex', '-1');
+  $('#shop-h').focus();
+});
+
+// keep ScrollTrigger honest after fonts/layout settle
+addEventListener('load', () => ScrollTrigger.refresh());
+
+});
+</script>
+</body>
+</html>
