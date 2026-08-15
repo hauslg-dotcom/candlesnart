@@ -48,3 +48,10 @@ If the CDN is unreachable, the site degrades to the static storyboard mode.
   (see `.photo-note` in the shop section).
 - Swap the placeholder tagline/copy for the brand's real voice if it differs.
 - Point the contact form at a real endpoint (currently a `mailto:` placeholder).
+
+## Also in this repo
+
+- [`dorm-designer/`](dorm-designer/) — **Dorm Studio**, a separate single-page
+  app. Describe the vibe you want and a fictional dorm room fills itself in with
+  matching products you can drag around, swap, and price out. See
+  [its README](dorm-designer/README.md).

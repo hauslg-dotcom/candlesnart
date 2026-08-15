@@ -1,0 +1,1720 @@
+<!doctype html>
+<html lang="en" data-time="day">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dorm Studio — design your dorm room before you buy anything</title>
+<meta name="description" content="Describe the vibe you're going for, and watch a fictional dorm room fill itself in. Swap products, pull real listings from a link, and see the whole thing before you spend a dollar.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   DORM STUDIO
+   One self-contained page. Three parts:
+     1. the vibe engine   — text + chips -> weights -> scores
+     2. the room          — hand-drawn SVG, procedural products
+     3. the panels        — picks, catalog, pull-from-a-link
+   Room time-of-day lives on <html data-time="day|night">.
+   ============================================================ */
+:root{
+  --paper:#F7F3EC;
+  --card:#FFFFFF;
+  --ink:#1B1A18;
+  --ink-2:#5A554D;
+  --ink-3:#8C867C;
+  --line:#E3DCD0;
+  --line-2:#D2C9B9;
+  --accent:#C4553B;
+  --accent-soft:#F6E3DC;
+  --good:#3E7D5A;
+  --shadow:0 1px 2px rgba(27,26,24,.05), 0 8px 24px -12px rgba(27,26,24,.18);
+  --r:14px;
+  --panel-w:340px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:Inter,system-ui,-apple-system,sans-serif;
+  font-size:15px;
+  line-height:1.5;
+  min-height:100vh;
+}
+.display{font-family:Fraunces,Georgia,serif;font-weight:600;letter-spacing:-.01em}
+button,input,textarea,select{font:inherit;color:inherit}
+button{background:none;border:0;cursor:pointer;color:inherit}
+a{color:inherit}
+svg{display:block}
+:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:6px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--paper);padding:10px 16px;z-index:99}
+.skip:focus{left:8px;top:8px}
+.vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 20px;
+  background:rgba(247,243,236,.88);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.brand{font-family:Fraunces,Georgia,serif;font-weight:800;font-size:20px;letter-spacing:-.02em;white-space:nowrap}
+.brand em{font-style:normal;color:var(--accent)}
+.brand small{display:block;font-family:Inter,sans-serif;font-weight:400;font-size:11px;color:var(--ink-3);letter-spacing:.02em}
+.topbar-spacer{flex:1 1 auto}
+.stat{display:flex;flex-direction:column;line-height:1.15;padding-right:14px;border-right:1px solid var(--line);margin-right:2px}
+.stat b{font-family:Fraunces,Georgia,serif;font-size:18px;font-weight:600}
+.stat span{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 13px;border-radius:999px;
+  border:1px solid var(--line-2);background:var(--card);
+  font-size:13px;font-weight:500;white-space:nowrap;
+  transition:background .15s,border-color .15s,transform .1s;
+}
+.btn:hover{background:#fff;border-color:var(--ink-3)}
+.btn:active{transform:translateY(1px)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover{background:#a94531;border-color:#a94531}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-ghost:hover{background:#EFE9DF;border-color:transparent}
+.btn-sm{padding:5px 10px;font-size:12px}
+
+/* ---------- app grid ---------- */
+.app{
+  display:grid;
+  grid-template-columns:var(--panel-w) minmax(0,1fr) var(--panel-w);
+  gap:16px;
+  padding:16px 20px 40px;
+  align-items:start;
+}
+.panel{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  position:sticky;top:70px;
+  max-height:calc(100vh - 90px);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.panel-body{overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:18px}
+.panel-body::-webkit-scrollbar{width:9px}
+.panel-body::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px;border:3px solid var(--card)}
+
+.block h2{font-family:Fraunces,Georgia,serif;font-size:16px;font-weight:600;margin-bottom:2px}
+.block p.hint{font-size:12.5px;color:var(--ink-3);margin-bottom:10px}
+
+/* ---------- vibe form ---------- */
+textarea#vibeText{
+  width:100%;min-height:86px;resize:vertical;
+  padding:11px 12px;border-radius:10px;
+  border:1px solid var(--line-2);background:#FCFAF6;
+  font-size:14px;line-height:1.45;
+}
+textarea#vibeText:focus{background:#fff;border-color:var(--ink-3);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{
+  padding:6px 11px;border-radius:999px;font-size:12.5px;
+  border:1px solid var(--line-2);background:#FCFAF6;
+  transition:all .14s;
+}
+.chip:hover{border-color:var(--ink-3)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:-1px;border:1px solid rgba(0,0,0,.15)}
+.field{margin-top:14px}
+.field label{display:block;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2);margin-bottom:6px}
+.range-row{display:flex;align-items:center;gap:10px}
+input[type=range]{flex:1;accent-color:var(--accent)}
+.range-val{font-family:Fraunces,Georgia,serif;font-size:15px;min-width:62px;text-align:right}
+.swatches{display:flex;flex-wrap:wrap;gap:6px}
+.swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.swatch[aria-pressed="true"]{border-color:var(--ink);transform:scale(1.06)}
+.go-row{display:flex;gap:8px;margin-top:14px}
+.go-row .btn{flex:1;justify-content:center}
+
+/* ---------- pull from link ---------- */
+details.pull{border:1px solid var(--line);border-radius:10px;background:#FCFAF6;overflow:hidden}
+details.pull>summary{
+  cursor:pointer;padding:11px 13px;font-size:13.5px;font-weight:600;list-style:none;
+  display:flex;align-items:center;gap:8px;
+}
+details.pull>summary::-webkit-details-marker{display:none}
+details.pull>summary::after{content:"+";margin-left:auto;font-size:17px;color:var(--ink-3)}
+details.pull[open]>summary::after{content:"–"}
+.pull-body{padding:0 13px 13px;display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--line)}
+.pull-body input[type=url],.pull-body input[type=text],.pull-body input[type=number],.pull-body select{
+  width:100%;padding:9px 10px;border:1px solid var(--line-2);border-radius:8px;background:#fff;font-size:13.5px;
+}
+.pull-note{font-size:11.5px;color:var(--ink-3);line-height:1.45}
+.pull-preview{display:flex;gap:10px;align-items:center;padding:9px;border:1px dashed var(--line-2);border-radius:9px;background:#fff}
+.pull-preview img{width:54px;height:54px;object-fit:cover;border-radius:6px;background:#EFE9DF;flex:0 0 auto}
+.pull-preview .t{font-size:12.5px;font-weight:600;line-height:1.3}
+.pull-preview .s{font-size:11.5px;color:var(--ink-3)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* ---------- stage ---------- */
+.stage{
+  background:var(--card);
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  position:relative;
+}
+.stage-head{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:11px 14px;border-bottom:1px solid var(--line);
+}
+.stage-head .who{font-family:Fraunces,Georgia,serif;font-size:15px;font-weight:600}
+.stage-head .why{font-size:12px;color:var(--ink-3)}
+.room-wrap{position:relative;background:#0000}
+#room{width:100%;height:auto;display:block;touch-action:none;cursor:default}
+#room.dragging{cursor:grabbing}
+.hitbox{cursor:grab}
+.hitbox:hover .hit-outline{opacity:.55}
+.hit-outline{opacity:0;transition:opacity .12s}
+.hitbox[data-selected="true"] .hit-outline{opacity:1}
+.item-enter{animation:pop .42s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.94)}to{opacity:1;transform:none}}
+.stage-foot{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:10px 14px;border-top:1px solid var(--line);min-height:46px;
+}
+.stage-foot .live{font-size:12.5px;color:var(--ink-2)}
+.sel-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sel-name{font-size:12.5px;font-weight:600;margin-right:2px}
+.empty{
+  position:absolute;inset:auto 0 0 0;top:0;display:grid;place-items:center;text-align:center;
+  padding:24px;pointer-events:none;
+}
+.empty div{background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:12px;padding:14px 18px;max-width:340px;box-shadow:var(--shadow)}
+.empty h3{font-family:Fraunces,Georgia,serif;font-size:17px;margin-bottom:4px}
+.empty p{font-size:13px;color:var(--ink-2)}
+
+/* ---------- right panel: tabs + lists ---------- */
+.tabs{display:flex;border-bottom:1px solid var(--line);flex:0 0 auto}
+.tab{
+  flex:1;padding:12px 8px;font-size:13px;font-weight:600;color:var(--ink-3);
+  border-bottom:2px solid transparent;
+}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .n{font-size:11px;color:var(--ink-3);font-weight:500}
+.filters{display:flex;gap:6px;padding:0 0 4px}
+.filters input,.filters select{
+  padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;background:#FCFAF6;font-size:12.5px;min-width:0;
+}
+.filters input{flex:1}
+.list{display:flex;flex-direction:column;gap:8px}
+.card{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:9px;border:1px solid var(--line);border-radius:11px;background:#FCFAF6;
+  text-align:left;width:100%;transition:border-color .14s,background .14s;
+}
+.card:hover{background:#fff;border-color:var(--line-2)}
+.card[data-in="true"]{background:#fff;border-color:var(--ink);box-shadow:inset 3px 0 0 var(--accent)}
+.thumb{
+  width:56px;height:56px;flex:0 0 auto;border-radius:8px;overflow:hidden;
+  background:#EFE9DF;border:1px solid var(--line);
+}
+.thumb svg,.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.card .meta{flex:1;min-width:0}
+.card .nm{font-size:13px;font-weight:600;line-height:1.25}
+.card .sub{font-size:11.5px;color:var(--ink-3);margin-top:1px}
+.card .row{display:flex;align-items:center;gap:6px;margin-top:5px;flex-wrap:wrap}
+.price{font-family:Fraunces,Georgia,serif;font-size:13.5px}
+.tag{
+  font-size:10.5px;padding:2px 7px;border-radius:999px;
+  background:var(--accent-soft);color:#8B3A24;white-space:nowrap;
+}
+.tag.plain{background:#EFE9DF;color:var(--ink-2)}
+.match{font-size:10.5px;color:var(--good);font-weight:600}
+.card-actions{display:flex;flex-direction:column;gap:4px;flex:0 0 auto}
+.icon-btn{
+  width:28px;height:28px;border-radius:8px;border:1px solid var(--line-2);background:#fff;
+  display:grid;place-items:center;font-size:14px;line-height:1;color:var(--ink-2);
+}
+.icon-btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.zone-head{
+  font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);
+  font-weight:600;margin:6px 0 -2px;
+}
+.empty-list{font-size:13px;color:var(--ink-3);padding:18px 6px;text-align:center;line-height:1.5}
+
+/* ---------- footer ---------- */
+footer{
+  padding:22px 20px 46px;max-width:900px;margin:0 auto;
+  font-size:12.5px;color:var(--ink-3);line-height:1.6;text-align:center;
+}
+footer a{color:var(--ink-2)}
+.toast{
+  position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(14px);
+  background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:999px;
+  font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;
+  max-width:calc(100vw - 32px);text-align:center;
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+
+/* ---------- responsive ---------- */
+@media (max-width:1180px){
+  :root{--panel-w:300px}
+}
+@media (max-width:1000px){
+  .app{grid-template-columns:1fr;gap:14px;padding:14px}
+  .panel{position:static;max-height:none}
+  .panel-body{max-height:none}
+  .stage{order:-1}
+  .panel-left{order:0}
+  .panel-right{order:1}
+  .panel-right .panel-body{max-height:560px}
+}
+@media (max-width:560px){
+  .topbar{padding:10px 14px;gap:10px}
+  .brand{font-size:17px}
+  .stat{display:none}
+  .btn{padding:7px 11px;font-size:12.5px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#stage">Skip to the room</a>
+
+<header class="topbar">
+  <div class="brand">Dorm<em>Studio</em><small>see it before you buy it</small></div>
+  <div class="topbar-spacer"></div>
+  <div class="stat"><b id="statTotal">$0</b><span>est. total</span></div>
+  <div class="stat" style="border-right:0"><b id="statCount">0</b><span>items</span></div>
+  <div class="tools">
+    <button class="btn" id="btnNight" aria-pressed="false" title="Toggle the room lights">🌙 Night</button>
+    <button class="btn" id="btnShuffle" title="Re-roll the picks for this vibe">🎲 Shuffle</button>
+    <button class="btn" id="btnShare" title="Copy a link that restores this room">🔗 Share</button>
+    <button class="btn" id="btnExport" title="Download the room as a PNG">⬇ PNG</button>
+    <button class="btn btn-ghost" id="btnClear" title="Empty the room">Clear</button>
+  </div>
+</header>
+
+<main class="app">
+  <!-- ================= LEFT: the vibe ================= -->
+  <aside class="panel panel-left" aria-label="Your taste and budget">
+    <div class="panel-body">
+      <div class="block">
+        <h2>What are you going for?</h2>
+        <p class="hint">Write it however you'd say it out loud. Colors, stuff you like, stuff you hate — it all counts.</p>
+        <label class="vh" for="vibeText">Describe your vibe</label>
+        <textarea id="vibeText" placeholder="warm and cozy, lots of plants, cream and rust colors, no neon please — i want it to feel like a small apartment, not a dorm"></textarea>
+        <div class="chips" id="vibeChips" role="group" aria-label="Vibe presets"></div>
+
+        <div class="field">
+          <label for="accentPick">Accent color</label>
+          <div class="swatches" id="accentPick" role="group" aria-label="Accent color"></div>
+        </div>
+
+        <div class="field">
+          <label for="budget">Budget</label>
+          <div class="range-row">
+            <input type="range" id="budget" min="150" max="1600" step="25" value="700">
+            <span class="range-val" id="budgetVal">$700</span>
+          </div>
+        </div>
+
+        <div class="go-row">
+          <button class="btn btn-primary" id="btnDesign">Design my room</button>
+          <button class="btn" id="btnReset" title="Clear the vibe">Reset</button>
+        </div>
+      </div>
+
+      <div class="block">
+        <h2>Pull a product from a link</h2>
+        <p class="hint">Paste a listing from any store. We read the page's title, price and photo and drop the real thing into the room.</p>
+        <details class="pull" id="pullBox">
+          <summary>Add something from the internet</summary>
+          <div class="pull-body">
+            <label class="vh" for="pullUrl">Product URL</label>
+            <input type="url" id="pullUrl" placeholder="https://store.com/that-rug-i-want" autocomplete="off">
+            <button class="btn" id="btnFetch">Read the page</button>
+            <div id="pullStatus" class="pull-note" role="status"></div>
+            <div class="pull-preview" id="pullPreview" hidden>
+              <img id="pullImg" alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E">
+              <div style="min-width:0">
+                <div class="t" id="pullTitle">—</div>
+                <div class="s" id="pullSite">—</div>
+              </div>
+            </div>
+            <div class="grid2">
+              <div>
+                <label class="vh" for="pullName">Name</label>
+                <input type="text" id="pullName" placeholder="Name">
+              </div>
+              <div>
+                <label class="vh" for="pullPrice">Price</label>
+                <input type="number" id="pullPrice" placeholder="Price" min="0" step="1">
+              </div>
+            </div>
+            <label class="vh" for="pullZone">Where does it go?</label>
+            <select id="pullZone"></select>
+            <button class="btn btn-primary" id="btnAddPulled">Put it in the room</button>
+            <p class="pull-note">Sites that block cross-origin readers (a lot of the big ones do) won't hand over their data. When that happens, type the name and price yourself and paste the image address — right-click the product photo → “Copy image address” — into the URL box.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= CENTER: the room ================= -->
+  <section class="stage" id="stage" aria-label="Your dorm room">
+    <div class="stage-head">
+      <div style="min-width:0">
+        <div class="who" id="roomTitle">An empty double, waiting</div>
+        <div class="why" id="roomWhy">Say what you are into, hit Design my room, and this fills in.</div>
+      </div>
+    </div>
+    <div class="room-wrap">
+      <svg id="room" viewBox="0 0 1200 820" role="img" aria-labelledby="roomA11y">
+        <title id="roomA11y">A drawing of a dorm room</title>
+      </svg>
+      <div class="empty" id="emptyState">
+        <div>
+          <h3>Nothing in here yet</h3>
+          <p>Describe your vibe and hit <b>Design my room</b> — or browse the catalog and place things one at a time.</p>
+        </div>
+      </div>
+    </div>
+    <div class="stage-foot">
+      <div class="sel-tools" id="selTools" hidden>
+        <span class="sel-name" id="selName">—</span>
+        <button class="btn btn-sm" data-act="smaller" title="Smaller">−</button>
+        <button class="btn btn-sm" data-act="bigger" title="Bigger">+</button>
+        <button class="btn btn-sm" data-act="swap">Swap</button>
+        <button class="btn btn-sm" data-act="center">Re-center</button>
+        <button class="btn btn-sm" data-act="remove">Remove</button>
+        <button class="btn btn-sm btn-ghost" data-act="find">Find it online ↗</button>
+      </div>
+      <div class="live" id="liveMsg" role="status" aria-live="polite">Drag anything in the room to move it. Click to select.</div>
+    </div>
+  </section>
+
+  <!-- ================= RIGHT: picks + catalog ================= -->
+  <aside class="panel panel-right" aria-label="Products">
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tabPicks" role="tab" aria-selected="true" aria-controls="panePicks">In the room <span class="n" id="picksN">(0)</span></button>
+      <button class="tab" id="tabBrowse" role="tab" aria-selected="false" aria-controls="paneBrowse">Browse</button>
+    </div>
+    <div class="panel-body">
+      <div id="panePicks" role="tabpanel" aria-labelledby="tabPicks">
+        <div class="list" id="picksList"></div>
+      </div>
+      <div id="paneBrowse" role="tabpanel" aria-labelledby="tabBrowse" hidden>
+        <div class="filters">
+          <label class="vh" for="search">Search products</label>
+          <input type="search" id="search" placeholder="Search 50+ things…">
+          <label class="vh" for="zoneFilter">Filter by spot</label>
+          <select id="zoneFilter"></select>
+        </div>
+        <div class="list" id="browseList" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <p><b>How the matching works:</b> your words are scored against every product's tags — no guessing, no black box. Each pick shows you which words earned it a spot.</p>
+  <p style="margin-top:8px">Prices are ballpark figures for that <i>kind</i> of item, not live listings. “Find it online” runs a real search at a real store so you see what's actually in stock today. Products drawn, not photographed.</p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   0. tiny helpers
+   ============================================================ */
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(n,a,b)=>Math.min(b,Math.max(a,n));
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const money=n=>"$"+Math.round(n).toLocaleString();
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2600);
+}
+/* ============================================================
+   1. THE VIBES
+   Each one is a bundle of words + what it does to the room itself.
+   ============================================================ */
+const VIBES=[
+ {id:"cozy",label:"Cozy",dot:"#D9A87C",
+  kw:"cozy cosy warm soft comfy comfort snug knit chunky cream beige neutral hygge candle blanket calm homey homely inviting nest",
+  theme:{wall:"#EADFCF",floor:"#B7A68E",fl:"carpet",warm:1,glow:"#FFCC8A"}},
+ {id:"dark",label:"Dark academia",dot:"#6B5340",
+  kw:"dark academia moody academic library books vintage antique brass leather plaid tweed brown burgundy oxblood classic old scholarly gothic study literary rich",
+  theme:{wall:"#5C5044",floor:"#6A5540",fl:"wood",warm:1,glow:"#FFB35C"}},
+ {id:"y2k",label:"Y2K",dot:"#FF6FB5",
+  kw:"y2k 2000s butterfly butterflies chrome funky bright hot pink lime checkerboard groovy fun loud maximalist blobby bubbly playful retro2000 shiny holographic",
+  theme:{wall:"#F2D6E6",floor:"#C7C3CC",fl:"carpet",warm:0,glow:"#FF6FB5"}},
+ {id:"coast",label:"Coastal",dot:"#7FB3C4",
+  kw:"coastal beach ocean sea blue navy airy breezy linen light bright white nautical stripe shell surf calm fresh",
+  theme:{wall:"#DCE7EA",floor:"#C6BBA4",fl:"seagrass",warm:0,glow:"#FFE2B0"}},
+ {id:"cottage",label:"Cottagecore",dot:"#9DB27C",
+  kw:"cottagecore cottage floral flowers gingham sage garden dried pastoral countryside romantic lace quilt vintage soft green mushroom whimsical",
+  theme:{wall:"#E2E7D8",floor:"#C0AC92",fl:"wood",warm:1,glow:"#FFD79A"}},
+ {id:"minimal",label:"Minimal",dot:"#B9B4AC",
+  kw:"minimal minimalist clean simple uncluttered white grey gray monochrome muted plain modern sleek scandi scandinavian tidy quiet neutral",
+  theme:{wall:"#EFEDE8",floor:"#CBC5BB",fl:"carpet",warm:0,glow:"#FFF0D6"}},
+ {id:"jungle",label:"Plant jungle",dot:"#5E8C5A",
+  kw:"plant plants jungle green leafy monstera botanical greenery terracotta garden nature vines pothos succulent fern earthy alive",
+  theme:{wall:"#DEE4D6",floor:"#B08F76",fl:"wood",warm:1,glow:"#FFD292"}},
+ {id:"gamer",label:"Gamer / LED",dot:"#7A5CFF",
+  kw:"gamer gaming led rgb neon setup pc console tech dark purple cyberpunk streamer desk battlestation esports screens keyboard",
+  theme:{wall:"#2B2D3B",floor:"#3A3D4C",fl:"carpet",warm:0,glow:"#8B6BFF"}},
+ {id:"pastel",label:"Pastel / kawaii",dot:"#E7B6DA",
+  kw:"pastel kawaii cute lilac lavender purple babypink baby soft plush fluffy sweet dreamy pink cloud heart bows sanrio",
+  theme:{wall:"#EDE2F2",floor:"#D8D0DE",fl:"carpet",warm:0,glow:"#FFC4E6"}},
+ {id:"mid",label:"Mid-century",dot:"#C98A46",
+  kw:"midcentury mid century modern retro walnut teak mustard ochre burnt orange teal geometric 60s 70s vinyl records atomic warmwood",
+  theme:{wall:"#E9DCC3",floor:"#A9835B",fl:"wood",warm:1,glow:"#FFC272"}},
+ {id:"boho",label:"Boho",dot:"#C98B6B",
+  kw:"boho bohemian macrame rattan tassels layered earthy terracotta rust woven fringe tapestry global eclectic wander desert",
+  theme:{wall:"#EBDFCD",floor:"#B79A7B",fl:"seagrass",warm:1,glow:"#FFC48A"}}
+];
+const VIBE_BY_ID=Object.fromEntries(VIBES.map(v=>[v.id,v]));
+
+/* accent colors the user can force */
+const ACCENTS=[
+ {id:"none",hex:"#DDD8CF",label:"No preference"},
+ {id:"rust",hex:"#C4553B",label:"Rust"},
+ {id:"pink",hex:"#EE6FA8",label:"Pink"},
+ {id:"sage",hex:"#8FA97C",label:"Sage"},
+ {id:"blue",hex:"#4E7EA8",label:"Blue"},
+ {id:"mustard",hex:"#D9A22B",label:"Mustard"},
+ {id:"purple",hex:"#7A5CFF",label:"Purple"},
+ {id:"cream",hex:"#EDE0C8",label:"Cream"},
+ {id:"black",hex:"#2A2A2A",label:"Black"}
+];
+const ACCENT_WORDS={rust:"rust orange terracotta burnt copper amber",pink:"pink blush rose magenta",sage:"sage green olive moss",
+ blue:"blue navy denim teal",mustard:"mustard yellow gold ochre",purple:"purple lilac lavender violet",cream:"cream beige ivory oat tan",black:"black charcoal monochrome"};
+
+/* ============================================================
+   2. THE ROOM'S SLOTS
+   x,y is the bottom-centre anchor in the 1200x820 viewBox.
+   ============================================================ */
+const SLOTS=[
+ {id:"wall-left",   takes:"wall",   x:243, y:474, label:"Wall over the bed",  bounds:[70,900,240,520]},
+ {id:"wall-center", takes:"wall",   x:566, y:436, label:"Wall, middle",   bounds:[420,1000,220,520]},
+ {id:"window",      takes:"window", x:986, y:470, label:"Window",             bounds:[820,1160,300,540]},
+ {id:"ceiling",     takes:"ceiling",x:600, y:96,  label:"Ceiling",            bounds:[260,1000,60,560]},
+ {id:"bed",         takes:"bed",    x:243, y:594, label:"Bed",                bounds:[150,360,520,640]},
+ {id:"under",       takes:"under",  x:250, y:700, label:"Under the bed",      bounds:[130,380,660,720]},
+ {id:"rug",         takes:"rug",    x:566, y:752, label:"Floor rug",          bounds:[380,820,640,800]},
+ {id:"desk-1",      takes:"desk",   x:812, y:590, label:"Desk (left)",        bounds:[770,1120,560,600]},
+ {id:"desk-2",      takes:"desk",   x:930, y:590, label:"Desk (middle)",      bounds:[770,1120,560,600]},
+ {id:"desk-3",      takes:"desk",   x:1042,y:590, label:"Desk (right)",       bounds:[770,1120,560,600]},
+ {id:"chair",       takes:"chair",  x:742, y:772, label:"Desk chair",         bounds:[600,900,700,800]},
+ {id:"corner-1",    takes:"corner", x:498, y:646, label:"Corner",             bounds:[400,720,600,720], sc:.82},
+ {id:"corner-2",    takes:"corner", x:672, y:668, label:"Corner (second)",    bounds:[400,760,600,760], sc:.78}
+];
+const SLOT_BY_ID=Object.fromEntries(SLOTS.map(s=>[s.id,s]));
+const ZONE_LABEL={wall:"Wall",window:"Window",ceiling:"Ceiling",bed:"Bedding",under:"Under-bed storage",
+ rug:"Rug",desk:"Desk",chair:"Chair",corner:"Floor & corner"};
+
+/* ============================================================
+   3. THE CATALOG
+   z=zone  d=draw routine  v=variant  c=colours  p=typical price
+   r=retailer to search  t=tags (vibe ids + plain english)
+   ============================================================ */
+const SHOPS={
+ target:{n:"Target",u:"https://www.target.com/s?searchTerm="},
+ ikea:{n:"IKEA",u:"https://www.ikea.com/us/en/search/?q="},
+ amazon:{n:"Amazon",u:"https://www.amazon.com/s?k="},
+ urban:{n:"Urban Outfitters",u:"https://www.urbanoutfitters.com/search?q="},
+ wayfair:{n:"Wayfair",u:"https://www.wayfair.com/keyword.php?keyword="},
+ walmart:{n:"Walmart",u:"https://www.walmart.com/search?q="},
+ etsy:{n:"Etsy",u:"https://www.etsy.com/search?q="},
+ dormify:{n:"Dormify",u:"https://www.dormify.com/search?q="}
+};
+
+const CATALOG=[
+/* ---------- WALL ---------- */
+{id:"w1", n:"Framed art print pair",       z:"wall",d:"poster", v:"pair",  c:["#E8DFCD","#7C6A55","#B8815A"],p:46, r:"etsy",  t:"cozy mid minimal boho art prints frames neutral warm gallery"},
+{id:"w2", n:"Big museum poster",           z:"wall",d:"poster", v:"solo",  c:["#F1EBDD","#2E2E2E","#C4553B"],p:28, r:"urban", t:"minimal mid dark art poster museum classic monochrome"},
+{id:"w3", n:"Gallery wall set (9 prints)", z:"wall",d:"gallery",v:"nine",  c:["#F3EEE3","#B49B79","#8FA97C"],p:34, r:"amazon",t:"cozy cottage boho pastel collage photos memories eclectic"},
+{id:"w4", n:"Woven tapestry",              z:"wall",d:"tapestry",v:"boho", c:["#C98B6B","#E8D9C0","#7C5A46"],p:32, r:"urban", t:"boho cozy jungle woven earthy fringe fabric warm texture"},
+{id:"w5", n:"Mushroom & moon tapestry",    z:"wall",d:"tapestry",v:"witch",c:["#4C4A6A","#E9C46A","#D98A8A"],p:26, r:"amazon",t:"cottage pastel y2k witchy mushroom moon stars celestial dreamy"},
+{id:"w6", n:"Round rattan mirror",         z:"wall",d:"mirror",  v:"round",c:["#C99B63","#DCE7EA"],       p:58, r:"target",t:"boho coast cozy jungle mirror rattan round natural bright"},
+{id:"w7", n:"Arched full-view mirror",     z:"wall",d:"mirror",  v:"arch", c:["#2A2A2A","#E6ECEE"],       p:72, r:"wayfair",t:"minimal dark mid mirror arch modern sleek black"},
+{id:"w8", n:"Floating shelf + trinkets",   z:"wall",d:"shelf",   v:"loaded",c:["#A9835B","#9DB27C","#E8DFCD"],p:24,r:"ikea", t:"mid cottage jungle minimal shelf books plants storage wood"},
+{id:"w9", n:"Custom neon sign",            z:"wall",d:"neon",    v:"script",c:["#FF6FB5","#2B2D3B"],      p:65, r:"etsy",  t:"y2k gamer pastel neon glow sign bright loud night pink"},
+{id:"w10",n:"LED strip wall zig-zag",      z:"wall",d:"ledstrip",v:"zig",  c:["#7A5CFF","#00D4D8"],       p:22, r:"amazon",t:"gamer y2k led rgb color changing tech bright night purple"},
+{id:"w11",n:"Corkboard photo wall",        z:"wall",d:"pinboard",v:"cork", c:["#C9A46B","#F3EEE3","#EE6FA8"],p:19,r:"target",t:"cozy y2k pastel photos memories polaroid friends collage"},
+{id:"w12",n:"Felt pennant banner",         z:"wall",d:"flag",    v:"pennant",c:["#4E7EA8","#EDE0C8"],     p:16, r:"amazon",t:"dark mid cozy college pennant classic school team navy"},
+{id:"w13",n:"Macrame wall hanging",        z:"wall",d:"macrame", v:"fringe",c:["#E4D6BF","#C98B6B"],      p:29, r:"etsy",  t:"boho cottage cozy macrame fringe woven cream natural texture"},
+{id:"w14",n:"Vinyl record display",        z:"wall",d:"records", v:"row",  c:["#2A2A2A","#D9A22B","#C4553B"],p:21,r:"urban",t:"mid dark y2k music records vinyl retro shelf display"},
+/* ---------- WINDOW ---------- */
+{id:"n1", n:"Blackout curtains",           z:"window",d:"curtains",v:"heavy",c:["#5C5044","#3E362C"],     p:38, r:"ikea",  t:"dark gamer minimal blackout heavy sleep dark brown privacy"},
+{id:"n2", n:"Sheer linen curtains",        z:"window",d:"curtains",v:"sheer",c:["#F1EBDD","#E4D9C4"],     p:26, r:"target",t:"coast minimal cozy cottage linen airy light breezy white"},
+{id:"n3", n:"Gingham cafe curtains",       z:"window",d:"curtains",v:"gingham",c:["#9DB27C","#F5F1E6"],   p:24, r:"etsy",  t:"cottage pastel gingham checked green sweet kitchen charming"},
+{id:"n4", n:"Windowsill plant row",        z:"window",d:"sill",   v:"plants",c:["#5E8C5A","#C98B6B"],     p:27, r:"target",t:"jungle cottage coast plants succulent green sill sunlight"},
+{id:"n5", n:"Butterfly window film",       z:"window",d:"film",   v:"y2k", c:["#FF6FB5","#7A5CFF"],       p:14, r:"amazon",t:"y2k pastel butterfly pink rainbow film prism light fun"},
+/* ---------- CEILING ---------- */
+{id:"c1", n:"Warm string lights",          z:"ceiling",d:"stringlights",v:"warm",c:["#FFCC8A","#8C806E"], p:15, r:"target",t:"cozy cottage boho coast minimal dark mid string lights warm glow soft night classic"},
+{id:"c2", n:"RGB ceiling drop lights",     z:"ceiling",d:"stringlights",v:"rgb", c:["#7A5CFF","#00D4D8","#FF6FB5"],p:23,r:"amazon",t:"gamer y2k rgb color led bright night party"},
+{id:"c3", n:"Sheer bed canopy",            z:"ceiling",d:"canopy",v:"sheer",c:["#F3EEE3","#E7D9C4"],      p:34, r:"dormify",ox:-330,oy:432,t:"pastel cottage cozy coast canopy drape dreamy soft princess"},
+{id:"c4", n:"Disco ball",                  z:"ceiling",d:"disco", v:"ball", c:["#C9CDD4","#FFFFFF"],      p:18, r:"urban", t:"y2k mid pastel disco party sparkle mirror fun glam"},
+{id:"c5", n:"Hanging pothos in macrame",   z:"ceiling",d:"hangplant",v:"pothos",c:["#5E8C5A","#E4D6BF"],  p:26, r:"etsy",  t:"jungle boho cottage plants hanging green vines trailing"},
+/* ---------- BED ---------- */
+{id:"b1", n:"Waffle duvet set, oat",       z:"bed",d:"bedding",v:"waffle", c:["#EDE0C8","#D8C7AC","#C4553B"],p:79,r:"target",t:"cozy minimal coast boho oat cream neutral waffle texture warm calm"},
+{id:"b2", n:"Flannel plaid bedding",       z:"bed",d:"bedding",v:"plaid",  c:["#7C4A3E","#3E362C","#C9A46B"],p:68,r:"walmart",t:"dark cozy mid plaid flannel warm brown burgundy classic winter"},
+{id:"b3", n:"Butterfly print bedding",     z:"bed",d:"bedding",v:"butterfly",c:["#FF9CC8","#7A5CFF","#FFF"],p:59,r:"dormify",t:"y2k pastel butterfly pink purple fun loud cute girly"},
+{id:"b4", n:"Sage floral quilt set",       z:"bed",d:"bedding",v:"floral", c:["#9DB27C","#F3EEE3","#D98A8A"],p:74,r:"urban",t:"cottage boho pastel floral sage green romantic quilt soft"},
+{id:"b5", n:"Navy jersey bedding",         z:"bed",d:"bedding",v:"solid",  c:["#33455E","#E8E4DA","#C4553B"],p:52,r:"target",t:"coast minimal dark navy blue simple sporty easy classic"},
+{id:"b6", n:"Charcoal microfiber set",     z:"bed",d:"bedding",v:"solid",  c:["#3A3D4C","#2B2D3B","#7A5CFF"],p:49,r:"amazon",t:"gamer minimal dark black charcoal grey sleek simple"},
+{id:"b7", n:"Lilac plush comforter",       z:"bed",d:"bedding",v:"plush",  c:["#D9C6EA","#F0E6F5","#EE6FA8"],p:64,r:"dormify",t:"pastel y2k cozy lilac purple plush fluffy soft cute"},
+{id:"b8", n:"Striped cotton set, blue",    z:"bed",d:"bedding",v:"stripe", c:["#4E7EA8","#F5F1E6","#D9A22B"],p:58,r:"ikea", t:"coast mid minimal stripe blue nautical fresh bright"},
+/* ---------- UNDER-BED ---------- */
+{id:"u1", n:"Fabric storage cubes (3)",    z:"under",d:"bins",   v:"fabric",c:["#D8C7AC","#B7A68E"],      p:24, r:"target",t:"cozy minimal coast storage tidy neutral organized cheap"},
+{id:"u2", n:"Rolling drawer cart",         z:"under",d:"drawers",v:"roll", c:["#E8E4DA","#C9CDD4"],       p:39, r:"ikea",  t:"minimal gamer pastel storage drawers organized white plastic"},
+{id:"u3", n:"Wire crates (2)",             z:"under",d:"crates", v:"wire", c:["#2A2A2A","#A9835B"],       p:28, r:"walmart",t:"minimal dark mid gamer storage wire black industrial"},
+{id:"u4", n:"Vintage trunk",               z:"under",d:"trunk",  v:"vintage",c:["#7C5A46","#C9A46B"],     p:52, r:"etsy",  t:"dark boho mid vintage trunk leather brown antique storage"},
+{id:"u5", n:"Woven seagrass baskets",      z:"under",d:"bins",   v:"woven",c:["#C9A46B","#E4D6BF"],       p:31, r:"target",t:"boho coast jungle cottage woven basket natural storage"},
+/* ---------- RUG ---------- */
+{id:"r1", n:"Cream shag rug",              z:"rug",d:"rug",v:"shag",   c:["#EFE6D6","#DDD0BA"],           p:62, r:"walmart",t:"cozy pastel minimal coast shag fluffy soft cream warm feet"},
+{id:"r2", n:"Round jute rug",              z:"rug",d:"rug",v:"jute",   c:["#C9A46B","#E4D6BF"],           p:54, r:"target",t:"boho coast jungle cottage jute natural round texture"},
+{id:"r3", n:"Kilim print runner",          z:"rug",d:"rug",v:"kilim",  c:["#C4553B","#3E362C","#E4D6BF"], p:48, r:"amazon",t:"boho mid dark kilim pattern rust red woven eclectic"},
+{id:"r4", n:"Checkerboard rug",            z:"rug",d:"rug",v:"check",  c:["#2A2A2A","#F1EBDD"],           p:45, r:"urban", t:"y2k mid minimal checkerboard checkered black white bold graphic"},
+{id:"r5", n:"Sage floral rug",             z:"rug",d:"rug",v:"floral", c:["#9DB27C","#F3EEE3","#D98A8A"], p:56, r:"etsy",  t:"cottage pastel boho floral sage green soft romantic"},
+{id:"r6", n:"Low-pile charcoal rug",       z:"rug",d:"rug",v:"solid",  c:["#4A4D58","#3A3D4C"],           p:42, r:"ikea",  t:"gamer minimal dark charcoal grey simple sleek easy clean"},
+{id:"r7", n:"Sunset gradient rug",         z:"rug",d:"rug",v:"gradient",c:["#FF9CC8","#FFC272","#7A5CFF"],p:58, r:"urban", t:"y2k pastel gradient sunset pink purple fun loud groovy"},
+/* ---------- DESK ---------- */
+{id:"d1", n:"Architect desk lamp",         z:"desk",d:"lamp",v:"architect",c:["#2A2A2A","#FFCC8A"],       p:34, r:"ikea",  t:"minimal dark gamer mid lamp task light black adjustable study"},
+{id:"d2", n:"Mushroom table lamp",         z:"desk",d:"lamp",v:"mushroom",c:["#EE6FA8","#FFE6F2"],        p:39, r:"urban", t:"y2k pastel mid cozy mushroom lamp glow cute retro pink"},
+{id:"d3", n:"Brass banker's lamp",         z:"desk",d:"lamp",v:"banker", c:["#C9A24B","#2F5D42"],         p:46, r:"amazon",t:"dark mid cozy brass green library vintage study scholarly"},
+{id:"d4", n:"Laptop on a riser",           z:"desk",d:"screen",v:"laptop",c:["#C9CDD4","#2A2A2A"],        p:29, r:"amazon",t:"minimal gamer coast tech laptop study work screen riser"},
+{id:"d5", n:"Curved gaming monitor",       z:"desk",d:"screen",v:"monitor",c:["#2B2D3B","#7A5CFF"],       p:189,r:"walmart",t:"gamer tech monitor screen rgb setup battlestation big"},
+{id:"d6", n:"Stack of books + bookends",   z:"desk",d:"books",v:"stack", c:["#7C4A3E","#C9A46B","#3E5C4A"],p:22,r:"etsy",  t:"dark cottage cozy mid books reading study vintage classic"},
+{id:"d7", n:"Small potted plant",          z:"desk",d:"plant",v:"small", c:["#5E8C5A","#C98B6B"],         p:18, r:"target",t:"jungle cottage coast boho plant green small terracotta alive"},
+{id:"d8", n:"Hand-painted candle set",     z:"desk",d:"candles",v:"trio",c:["#EDE0C8","#C4553B","#9DB27C"],p:36,r:"etsy",  t:"cozy cottage boho pastel candles warm art handmade soft ritual"},
+{id:"d9", n:"Bluetooth speaker",           z:"desk",d:"speaker",v:"cube", c:["#3A3D4C","#C4553B"],        p:44, r:"target",t:"gamer y2k minimal music speaker sound tech party"},
+{id:"d10",n:"Desk organizer + pens",       z:"desk",d:"organizer",v:"caddy",c:["#E8E4DA","#4E7EA8"],      p:17, r:"ikea",  t:"minimal coast pastel organized tidy study supplies clean"},
+{id:"d11",n:"Film photo frames (2)",       z:"desk",d:"frames",v:"pair",  c:["#C9A46B","#F3EEE3"],        p:15, r:"amazon",t:"cozy cottage y2k pastel photos memories friends home"},
+/* ---------- CHAIR ---------- */
+{id:"h1", n:"Mesh task chair",             z:"chair",d:"chair",v:"task",  c:["#3A3D4C","#2A2A2A"],        p:89, r:"ikea",  t:"minimal gamer coast study work ergonomic simple black"},
+{id:"h2", n:"RGB gaming chair",            z:"chair",d:"chair",v:"gaming",c:["#2B2D3B","#7A5CFF"],        p:179,r:"walmart",t:"gamer racing rgb bold black purple setup big comfy"},
+{id:"h3", n:"Wooden windsor chair",        z:"chair",d:"chair",v:"wood",  c:["#A9835B","#7C5A46"],        p:74, r:"etsy",  t:"dark cottage mid wood vintage classic warm scholarly"},
+{id:"h4", n:"Faux fur saucer chair",       z:"chair",d:"chair",v:"saucer",c:["#EFE6D6","#C9CDD4"],        p:64, r:"target",t:"cozy pastel y2k fluffy fur soft round comfy lounge"},
+{id:"h5", n:"Velvet desk stool",           z:"chair",d:"chair",v:"stool", c:["#3E5C4A","#C9A24B"],        p:58, r:"urban", t:"mid dark boho velvet green brass small elegant"},
+/* ---------- CORNER / FLOOR ---------- */
+{id:"f1", n:"Arc floor lamp",              z:"corner",d:"floorlamp",v:"arc",c:["#2A2A2A","#FFCC8A"],      p:79, r:"wayfair",t:"minimal mid gamer dark lamp tall light arc modern sleek"},
+{id:"f2", n:"Tripod floor lamp",           z:"corner",d:"floorlamp",v:"tripod",c:["#A9835B","#EDE0C8"],   p:68, r:"target",t:"mid cozy coast boho lamp wood warm light tripod classic"},
+{id:"f3", n:"Paper lantern floor lamp",    z:"corner",d:"floorlamp",v:"paper",c:["#F5F1E6","#C9CDD4"],    p:42, r:"ikea",  t:"minimal pastel coast cozy paper lantern soft glow japandi"},
+{id:"f4", n:"Big monstera",                z:"corner",d:"plant",v:"monstera",c:["#4E7D50","#C98B6B"],     p:58, r:"target",t:"jungle boho cottage coast plant big green leafy tropical alive"},
+{id:"f5", n:"Snake plant",                 z:"corner",d:"plant",v:"snake",c:["#3E6B44","#C9CDD4"],        p:34, r:"amazon",t:"jungle minimal dark plant green easy tall hardy low light"},
+{id:"f6", n:"Dried pampas in a vase",      z:"corner",d:"plant",v:"pampas",c:["#E4D6BF","#C9A46B"],       p:29, r:"etsy",  t:"boho cottage cozy minimal dried pampas neutral tall soft"},
+{id:"f7", n:"Bean bag",                    z:"corner",d:"beanbag",v:"round",c:["#C4553B","#8C4A36"],      p:69, r:"walmart",t:"cozy y2k gamer pastel lounge comfy floor seating chill big"},
+{id:"f8", n:"Mini fridge",                 z:"corner",d:"fridge",v:"mini", c:["#E8E4DA","#C9CDD4"],       p:129,r:"target",t:"gamer minimal coast fridge snacks practical white cold useful"},
+{id:"f9", n:"Ladder bookshelf",            z:"corner",d:"ladder",v:"lean", c:["#A9835B","#9DB27C"],       p:76, r:"wayfair",t:"mid boho cottage jungle shelf books plants wood storage"},
+{id:"f10",n:"Guitar on a stand",           z:"corner",d:"guitar",v:"acoustic",c:["#C9A46B","#7C5A46"],    p:34, r:"amazon",t:"mid dark boho cozy music guitar acoustic wood personality"},
+{id:"f11",n:"Leaning full-length mirror",  z:"corner",d:"tallmirror",v:"lean",c:["#C9A46B","#DCE7EA"],    p:88, r:"target",t:"minimal boho coast pastel mirror tall gold outfit light"},
+{id:"f12",n:"Standing fan",                z:"corner",d:"fan",v:"stand",  c:["#E8E4DA","#C9CDD4"],        p:36, r:"walmart",t:"minimal coast gamer sporty fan air cool practical summer"}
+];
+const BY_ID=Object.fromEntries(CATALOG.map(p=>[p.id,p]));
+/* ============================================================
+   4. DRAWING
+   Every routine returns {w,h,s}: a bounding box plus markup drawn
+   in local coords with (0,0) at the BOTTOM CENTRE of the object.
+   ============================================================ */
+function artwork(x,y,w,h,c,seed){
+  const s=seed%5, a=c[1]||"#8C806E", b=c[2]||c[0];
+  if(s===0)return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c[0]}"/><circle cx="${x+w/2}" cy="${y+h*.44}" r="${w*.27}" fill="${b}"/><rect x="${x}" y="${y+h*.7}" width="${w}" height="${h*.3}" fill="${a}" opacity=".5"/>`;
+  if(s===1)return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c[0]}"/><path d="M${x+w*.15} ${y+h*.85} Q${x+w*.5} ${y+h*.1} ${x+w*.85} ${y+h*.85}" fill="none" stroke="${a}" stroke-width="${w*.09}"/><path d="M${x+w*.3} ${y+h*.85} Q${x+w*.5} ${y+h*.38} ${x+w*.7} ${y+h*.85}" fill="none" stroke="${b}" stroke-width="${w*.07}"/>`;
+  if(s===2)return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c[0]}"/><ellipse cx="${x+w*.42}" cy="${y+h*.4}" rx="${w*.3}" ry="${h*.22}" fill="${a}" opacity=".8"/><ellipse cx="${x+w*.62}" cy="${y+h*.66}" rx="${w*.26}" ry="${h*.2}" fill="${b}" opacity=".85"/>`;
+  if(s===3)return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c[0]}"/>`+
+    [0,1,2,3].map(i=>`<rect x="${x+w*.14}" y="${y+h*(.18+i*.18)}" width="${w*(.72-i*.12)}" height="${h*.07}" rx="2" fill="${i%2?b:a}"/>`).join("");
+  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c[0]}"/><path d="M${x} ${y+h} L${x+w*.38} ${y+h*.3} L${x+w*.62} ${y+h*.72} L${x+w} ${y+h*.2} L${x+w} ${y+h} Z" fill="${a}" opacity=".75"/><circle cx="${x+w*.76}" cy="${y+h*.24}" r="${w*.08}" fill="${b}"/>`;
+}
+function framed(cx,top,w,h,fr,mat,c,seed){
+  const m=Math.min(w,h)*.11;
+  return `<g><rect x="${cx-w/2}" y="${top}" width="${w}" height="${h}" rx="2" fill="${fr}"/>`+
+    `<rect x="${cx-w/2+6}" y="${top+6}" width="${w-12}" height="${h-12}" fill="${mat}"/>`+
+    artwork(cx-w/2+6+m,top+6+m,w-12-m*2,h-12-m*2,c,seed)+
+    `<rect x="${cx-w/2}" y="${top}" width="${w}" height="${h}" rx="2" fill="none" stroke="rgba(0,0,0,.16)"/></g>`;
+}
+const leafPath=(x,y,s,rot,fill)=>`<path d="M0 0 C ${18*s} ${-14*s}, ${34*s} ${-8*s}, ${40*s} 0 C ${34*s} ${8*s}, ${18*s} ${14*s}, 0 0 Z" fill="${fill}" transform="translate(${x} ${y}) rotate(${rot})"/>`;
+
+const D={};
+
+/* ----- wall ----- */
+D.poster=(c,v)=>{
+  if(v==="pair"){const w=310,h=200;return{w,h,s:framed(-80,-h,140,180,c[1],c[0],c,1)+framed(80,-h+22,140,158,c[1],c[0],c,3)}}
+  const w=230,h=300;return{w,h,s:framed(0,-h,w,h,c[1],c[0],c,0)};
+};
+D.gallery=c=>{
+  const w=330,h=260,cells=[[-115,-250,90,110,0],[-10,-256,110,86,2],[110,-244,90,100,1],[-120,-130,80,96,3],[-14,-160,116,140,4],[112,-136,92,110,0],[-108,-24,74,88,2],[-6,-14,96,74,1],[104,-20,84,92,3]];
+  return{w,h,s:cells.map(([x,y,cw,ch,sd])=>framed(x,y,cw,ch,c[1],c[0],c,sd)).join("")};
+};
+D.tapestry=(c,v)=>{
+  const w=330,h=380,x=-w/2,y=-h;
+  let s=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${v==="witch"?c[0]:c[1]}"/>`;
+  if(v==="boho"){
+    for(let i=0;i<7;i++)s+=`<rect x="${x}" y="${y+18+i*48}" width="${w}" height="${i%2?9:22}" fill="${i%2?c[2]:c[0]}" opacity=".9"/>`;
+    for(let i=0;i<9;i++)s+=`<path d="M${x+22+i*36} ${y+150} l18 26 l-18 26 l-18 -26 Z" fill="${c[0]}" opacity=".55"/>`;
+    for(let i=0;i<16;i++)s+=`<line x1="${x+12+i*20}" y1="${y+h}" x2="${x+12+i*20}" y2="${y+h+22}" stroke="${c[0]}" stroke-width="3"/>`;
+  }else{
+    s+=`<circle cx="0" cy="${y+110}" r="52" fill="${c[1]}" stroke="${c[2]}" stroke-width="4"/><path d="M-26 ${y+110} a26 26 0 1 0 0 -1" fill="${c[2]}"/>`;
+    for(let i=0;i<5;i++){const mx=x+50+i*58,my=y+230+(i%2)*60;
+      s+=`<path d="M${mx-24} ${my} a24 16 0 0 1 48 0 Z" fill="${c[2]}"/><rect x="${mx-6}" y="${my}" width="12" height="26" rx="4" fill="${c[0]}"/>`;}
+    for(let i=0;i<14;i++)s+=`<circle cx="${x+16+((i*47)%(w-32))}" cy="${y+30+((i*83)%(h-60))}" r="2.6" fill="${c[1]==="#4C4A6A"?"#F0E6C8":c[0]}" opacity=".85"/>`;
+  }
+  return{w,h:h+22,s};
+};
+D.mirror=(c,v)=>{
+  if(v==="arch"){const w=190,h=300;
+    return{w,h,s:`<path d="M${-w/2} 0 L${-w/2} ${-h+95} A${w/2} 95 0 0 1 ${w/2} ${-h+95} L${w/2} 0 Z" fill="${c[0]}"/>`+
+      `<path d="M${-w/2+11} -11 L${-w/2+11} ${-h+95} A${w/2-11} 84 0 0 1 ${w/2-11} ${-h+95} L${w/2-11} -11 Z" fill="${c[1]}"/>`+
+      `<path d="M${-w/2+11} -11 L${-w/2+11} ${-h+110} L${w/2-46} -11 Z" fill="#fff" opacity=".35"/>`};}
+  const r=105;return{w:r*2,h:r*2,s:`<circle cx="0" cy="${-r}" r="${r}" fill="${c[0]}"/><circle cx="0" cy="${-r}" r="${r-14}" fill="${c[1]}"/>`+
+    `<path d="M${-r+18} ${-r+40} A${r-14} ${r-14} 0 0 1 ${-r+70} ${-r*2+24}" stroke="#fff" stroke-width="9" fill="none" opacity=".45"/>`+
+    Array.from({length:36},(_,i)=>`<line x1="0" y1="${-r}" x2="${Math.cos(i/36*6.28)*r}" y2="${-r+Math.sin(i/36*6.28)*r}" stroke="rgba(0,0,0,.07)" stroke-width="2"/>`).join("")};
+};
+D.shelf=c=>{
+  const w=260,h=150;
+  let s=`<rect x="${-w/2}" y="-16" width="${w}" height="14" rx="3" fill="${c[0]}"/><rect x="${-w/2+8}" y="-2" width="${w-16}" height="6" fill="rgba(0,0,0,.18)"/>`;
+  for(let i=0;i<5;i++)s+=`<rect x="${-w/2+18+i*13}" y="${-16-(52+(i%3)*12)}" width="11" height="${52+(i%3)*12}" rx="2" fill="${i%2?c[2]:c[1]}"/>`;
+  s+=`<rect x="10" y="-46" width="46" height="30" rx="4" fill="${c[1]}"/>`+leafPath(34,-52,.5,-140,c[1])+leafPath(34,-52,.5,-40,c[1])+leafPath(34,-58,.42,-90,c[1]);
+  s+=`<rect x="72" y="-40" width="24" height="24" rx="3" fill="${c[2]}"/><path d="M84 -40 v-10" stroke="#8C806E" stroke-width="2"/>`;
+  return{w,h,s};
+};
+D.neon=(c)=>{
+  const w=250,h=120;
+  const p=`M-100 -22 q22 -70 46 -34 q10 16 -6 44 q28 -58 54 -44 q14 8 -2 44 q26 -54 52 -34`;
+  return{w,h,s:`<g class="neon"><path d="${p}" fill="none" stroke="${c[0]}" stroke-width="16" opacity=".28" filter="url(#glow)"/>`+
+    `<path d="${p}" fill="none" stroke="${c[0]}" stroke-width="6" stroke-linecap="round"/>`+
+    `<path d="${p}" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".75"/></g>`};
+};
+D.ledstrip=c=>{
+  const w=420,h=210,p=`M-210 -6 L-70 -200 L70 -6 L210 -200`;
+  return{w,h,s:`<path d="${p}" fill="none" stroke="${c[0]}" stroke-width="18" opacity=".3" filter="url(#glow)"/>`+
+    `<path d="${p}" fill="none" stroke="${c[0]}" stroke-width="7" stroke-linecap="round"/>`+
+    `<path d="${p}" fill="none" stroke="${c[1]}" stroke-width="7" stroke-linecap="round" opacity=".5" stroke-dasharray="26 26"/>`};
+};
+D.pinboard=c=>{
+  const w=290,h=220;let s=`<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" rx="4" fill="${c[0]}"/><rect x="${-w/2+7}" y="${-h+7}" width="${w-14}" height="${h-14}" fill="rgba(0,0,0,.07)"/>`;
+  const ph=[[-88,-176,68,80,-7],[-8,-186,72,84,4],[74,-172,64,76,-4],[-72,-84,64,74,6],[10,-92,70,80,-5],[86,-78,58,68,8]];
+  ph.forEach(([x,y,pw,phh,rot],i)=>{s+=`<g transform="rotate(${rot} ${x+pw/2} ${y+phh/2})"><rect x="${x}" y="${y}" width="${pw}" height="${phh}" fill="${c[1]}"/>`+
+    artwork(x+5,y+5,pw-10,phh-20,[c[1],c[2],"#8C806E"],i)+`<circle cx="${x+pw/2}" cy="${y+4}" r="4" fill="${c[2]}"/></g>`;});
+  return{w,h,s};
+};
+D.flag=c=>({w:230,h:130,s:`<path d="M-115 -126 L115 -112 L100 -34 L-115 -20 Z" fill="${c[0]}"/><path d="M-115 -126 L-84 -122 L-84 -24 L-115 -20 Z" fill="${c[1]}" opacity=".9"/>`+
+  `<text x="6" y="-64" font-family="Fraunces,Georgia,serif" font-size="34" font-weight="800" fill="${c[1]}" text-anchor="middle">DORM</text>`});
+D.macrame=c=>{
+  const w=220,h=300;let s=`<rect x="${-w/2}" y="${-h}" width="${w}" height="9" rx="4" fill="#A9835B"/>`;
+  for(let i=0;i<11;i++){const x=-w/2+12+i*19,len=110+Math.abs(5-i)*22;
+    s+=`<path d="M${x} ${-h+9} v${len*.5} q6 26 0 ${len*.5}" stroke="${i%3?c[0]:c[1]}" stroke-width="6" fill="none" stroke-linecap="round"/>`;}
+  for(let i=0;i<5;i++)s+=`<path d="M${-70+i*35} ${-h+70} l17 24 l-17 24 l-17 -24 Z" fill="none" stroke="${c[1]}" stroke-width="4"/>`;
+  return{w,h,s};
+};
+D.records=c=>{
+  const w=300,h=120;let s=`<rect x="${-w/2}" y="-12" width="${w}" height="10" rx="3" fill="${c[0]}"/>`;
+  [[-95,c[1]],[0,c[2]],[95,c[1]]].forEach(([x,col],i)=>{s+=`<rect x="${x-46}" y="-108" width="92" height="96" fill="${col}"/><circle cx="${x}" cy="-60" r="30" fill="${c[0]}"/><circle cx="${x}" cy="-60" r="9" fill="${col}"/>`;});
+  return{w,h,s};
+};
+
+/* ----- window ----- */
+D.curtains=(c,v)=>{
+  const w=360,h=400,top=-h;
+  let s=`<rect x="${-w/2-14}" y="${top}" width="${w+28}" height="10" rx="5" fill="#8C806E"/>`;
+  const panel=(sx,dir)=>{let p="";
+    for(let i=0;i<5;i++){const x=sx+dir*i*24;
+      p+=`<path d="M${x} ${top+10} q${dir*10} ${h*.4} ${dir*4} ${h-14} l${dir*22} 0 q${dir*6} ${-h*.5} ${dir*-2} ${-(h-24)} Z" fill="${i%2?c[0]:c[1]}" opacity="${v==="sheer"?.62:1}"/>`;}
+    return p;};
+  s+=panel(-w/2,1)+panel(w/2,-1);
+  if(v==="gingham"){for(let i=0;i<9;i++)s+=`<rect x="${-w/2}" y="${top+30+i*40}" width="${w}" height="12" fill="${c[0]}" opacity=".35"/>`;}
+  return{w:w+30,h,s};
+};
+D.sill=c=>{
+  const w=300,h=110;let s="";
+  [[-105,1],[-40,.82],[20,1.05],[86,.75]].forEach(([x,sc],i)=>{
+    s+=`<path d="M${x-22*sc} ${-46*sc} h${44*sc} l${-6*sc} ${46*sc} h${-32*sc} Z" fill="${c[1]}"/>`;
+    for(let k=0;k<4;k++)s+=leafPath(x,-48*sc,.5*sc,-160+k*45,c[0]);
+  });
+  return{w,h,s};
+};
+D.film=c=>{
+  const w=280,h=250;let s="";
+  for(let i=0;i<9;i++){const x=-120+((i*67)%240),y=-150-((i*53)%190),sc=.5+((i*7)%5)/9;
+    s+=`<g transform="translate(${x} ${y}) scale(${sc})" opacity=".72"><path d="M0 0 C-30 -34 -46 -8 -8 6 Z" fill="${c[0]}"/><path d="M0 0 C30 -34 46 -8 8 6 Z" fill="${c[1]}"/></g>`;}
+  return{w,h,s};
+};
+
+/* ----- ceiling ----- */
+D.stringlights=(c,v)=>{
+  const w=680,h=150;
+  /* two quadratic swags, sampled so a bulb sits on the wire */
+  const A=[[-340,-140],[-170,-6],[0,-60]], B=[[0,-60],[170,-114],[340,-20]];
+  const qx=(P,t)=>(1-t)*(1-t)*P[0][0]+2*(1-t)*t*P[1][0]+t*t*P[2][0];
+  const qy=(P,t)=>(1-t)*(1-t)*P[0][1]+2*(1-t)*t*P[1][1]+t*t*P[2][1];
+  let s=`<path d="M-340 -140 Q-170 -6 0 -60 Q170 -114 340 -20" fill="none" stroke="${v==="rgb"?"#3A3D4C":c[1]}" stroke-width="2.5"/>`;
+  for(let i=0;i<=11;i++){
+    [A,B].forEach((P,seg)=>{
+      const t=i/11, x=qx(P,t), y=qy(P,t);
+      const col=v==="rgb"?c[(i+seg)%c.length]:c[0];
+      s+=`<circle cx="${x}" cy="${y+10}" r="10" fill="${col}" opacity=".32" filter="url(#glow)"/><circle cx="${x}" cy="${y+10}" r="4.6" fill="${col}"/>`;
+    });
+  }
+  return{w,h,s};
+};
+D.canopy=c=>({w:430,h:450,s:`<ellipse cx="0" cy="-446" rx="30" ry="9" fill="#C9A46B"/>`+
+  `<path d="M0 -440 C-92 -398 -172 -220 -198 0 L-112 0 C-102 -200 -52 -370 0 -424 Z" fill="${c[0]}" opacity=".7"/>`+
+  `<path d="M0 -440 C92 -398 172 -220 198 0 L112 0 C102 -200 52 -370 0 -424 Z" fill="${c[1]}" opacity=".7"/>`+
+  `<path d="M0 -424 C-42 -376 -72 -200 -78 0 L78 0 C72 -200 42 -376 0 -424 Z" fill="${c[0]}" opacity=".34"/>`});
+D.disco=c=>{
+  const r=42;let s=`<line x1="0" y1="-200" x2="0" y2="${-r*2}" stroke="#8C806E" stroke-width="2"/><circle cx="0" cy="${-r}" r="${r}" fill="${c[0]}"/>`;
+  for(let i=0;i<6;i++)for(let k=0;k<10;k++){const a=(k/10)*6.28,rr=r*(1-Math.abs(i-2.5)/4.2);
+    s+=`<rect x="${Math.cos(a)*rr-5}" y="${-r+(i-3)*13}" width="9" height="10" fill="${(i+k)%3?c[0]:c[1]}" opacity="${.35+((i+k)%4)*.16}"/>`;}
+  s+=`<circle cx="${-r*.4}" cy="${-r*1.4}" r="${r*.28}" fill="#fff" opacity=".5"/>`;
+  return{w:r*2,h:200,s};
+};
+D.hangplant=c=>{
+  const w=170,h=280;let s=`<line x1="0" y1="-280" x2="0" y2="-150" stroke="${c[1]}" stroke-width="3"/>`;
+  s+=`<path d="M-46 -150 q46 -34 92 0 q-14 46 -46 46 q-32 0 -46 -46 Z" fill="${c[1]}"/>`;
+  for(let i=0;i<3;i++)s+=`<line x1="${-40+i*40}" y1="-152" x2="0" y2="-232" stroke="${c[1]}" stroke-width="2.5"/>`;
+  for(let i=0;i<5;i++){const x=-48+i*24,len=60+((i*37)%80);
+    s+=`<path d="M${x} -140 q${i%2?14:-14} ${len*.6} ${i%2?6:-6} ${len}" stroke="${c[0]}" stroke-width="3" fill="none"/>`;
+    for(let k=1;k<5;k++)s+=leafPath(x+(i%2?6:-6)*k/4,-140+len*k/4.4,.2,(i%2?1:-1)*(20+k*18),c[0]);}
+  return{w,h,s};
+};
+
+/* ----- bed ----- */
+D.bedding=(c,v,A)=>{
+  const w=356,h=132,acc=A||c[2]||c[0];
+  let s=`<path d="M-178 0 L-178 -46 q0 -14 16 -14 L162 -60 q16 0 16 14 L178 0 Z" fill="${c[0]}"/>`;
+  if(v==="plaid"){for(let i=0;i<7;i++)s+=`<rect x="${-178+i*52}" y="-60" width="10" height="60" fill="${c[1]}" opacity=".8"/>`;
+    for(let i=0;i<3;i++)s+=`<rect x="-178" y="${-52+i*18}" width="356" height="7" fill="${c[2]}" opacity=".7"/>`;}
+  if(v==="stripe"){for(let i=0;i<12;i++)s+=`<rect x="${-178+i*30}" y="-60" width="14" height="60" fill="${c[1]}" opacity=".55"/>`;}
+  if(v==="waffle"){for(let i=0;i<18;i++)for(let k=0;k<4;k++)s+=`<rect x="${-172+i*20}" y="${-54+k*14}" width="12" height="9" rx="2" fill="none" stroke="${c[1]}" stroke-width="1.6" opacity=".8"/>`;}
+  if(v==="butterfly"){for(let i=0;i<11;i++){const x=-158+((i*61)%320),y=-52+((i*29)%40);
+    s+=`<g transform="translate(${x} ${y}) scale(.42)"><path d="M0 0 C-30 -34 -46 -8 -8 6 Z" fill="${c[1]}"/><path d="M0 0 C30 -34 46 -8 8 6 Z" fill="${c[2]}"/></g>`;}}
+  if(v==="floral"){for(let i=0;i<14;i++){const x=-162+((i*53)%330),y=-50+((i*31)%40);
+    s+=`<g transform="translate(${x} ${y})">${[0,72,144,216,288].map(a=>`<ellipse cx="0" cy="-6" rx="4" ry="7" fill="${c[2]}" transform="rotate(${a})"/>`).join("")}<circle r="3" fill="${c[1]}"/></g>`;}}
+  if(v==="plush"){for(let i=0;i<26;i++)s+=`<circle cx="${-170+((i*47)%340)}" cy="${-48+((i*23)%38)}" r="9" fill="${c[1]}" opacity=".55"/>`;}
+  s+=`<path d="M-178 -46 q0 -14 16 -14 L162 -60 q16 0 16 14 Z" fill="#fff" opacity=".13"/>`;
+  s+=`<path d="M-178 -14 L178 -20" stroke="rgba(0,0,0,.12)" stroke-width="2" fill="none"/>`;
+  s+=`<path d="M-168 -62 q-8 -40 26 -44 l64 -6 q34 0 30 40 q-2 14 -22 14 l-78 6 q-18 0 -20 -10 Z" fill="${c[1]}"/>`;
+  s+=`<path d="M-150 -70 q-6 -30 22 -34 l50 -5 q26 0 24 30 q-2 11 -18 11 l-62 5 q-14 0 -16 -7 Z" fill="${c[0]}" opacity=".95"/>`;
+  s+=`<path d="M-40 -60 q-6 -26 20 -30 l44 -4 q24 0 22 26 q-2 10 -16 10 l-54 4 q-14 0 -16 -6 Z" fill="${acc}"/>`;
+  s+=`<path d="M96 -60 q28 -8 52 6 q14 8 8 22 q-6 14 -26 12 l-40 -6 Z" fill="${acc}" opacity=".85"/>`;
+  s+=`<path d="M120 -30 q30 -10 54 2 l0 28 l-58 0 Z" fill="${c[1]}" opacity=".9"/>`;
+  return{w,h,s};
+};
+
+/* ----- under bed ----- */
+D.bins=(c,v)=>{const w=300,h=64;let s="";
+  [-100,0,100].forEach((x,i)=>{s+=`<rect x="${x-46}" y="${-h+6}" width="92" height="${h-6}" rx="6" fill="${i%2?c[1]:c[0]}"/>`+
+    `<rect x="${x-46}" y="${-h+6}" width="92" height="10" rx="4" fill="rgba(0,0,0,.13)"/>`+
+    (v==="woven"?Array.from({length:6},(_,k)=>`<line x1="${x-46}" y1="${-h+18+k*8}" x2="${x+46}" y2="${-h+18+k*8}" stroke="rgba(0,0,0,.1)" stroke-width="3"/>`).join(""):`<rect x="${x-16}" y="${-h+22}" width="32" height="8" rx="4" fill="rgba(0,0,0,.16)"/>`);});
+  return{w,h,s};};
+D.drawers=c=>{const w=140,h=66;let s=`<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" rx="7" fill="${c[0]}"/>`;
+  for(let i=0;i<3;i++)s+=`<rect x="${-w/2+6}" y="${-h+6+i*19}" width="${w-12}" height="16" rx="4" fill="${c[1]}"/><rect x="-14" y="${-h+11+i*19}" width="28" height="5" rx="2.5" fill="rgba(0,0,0,.25)"/>`;
+  s+=`<circle cx="${-w/2+16}" cy="-4" r="6" fill="#5A554D"/><circle cx="${w/2-16}" cy="-4" r="6" fill="#5A554D"/>`;
+  return{w,h,s};};
+D.crates=c=>{const w=250,h=62;let s="";
+  [-62,62].forEach(x=>{s+=`<rect x="${x-58}" y="${-h}" width="116" height="${h}" rx="4" fill="none" stroke="${c[0]}" stroke-width="5"/>`;
+    for(let i=1;i<5;i++)s+=`<line x1="${x-58+i*23}" y1="${-h}" x2="${x-58+i*23}" y2="0" stroke="${c[0]}" stroke-width="3"/>`;
+    s+=`<line x1="${x-58}" y1="${-h/2}" x2="${x+58}" y2="${-h/2}" stroke="${c[0]}" stroke-width="3"/>`;
+    s+=`<rect x="${x-50}" y="${-h+8}" width="100" height="18" rx="3" fill="${c[1]}" opacity=".8"/>`;});
+  return{w,h,s};};
+D.trunk=c=>({w:230,h:70,s:`<rect x="-115" y="-70" width="230" height="70" rx="8" fill="${c[0]}"/>`+
+  `<rect x="-115" y="-70" width="230" height="20" rx="8" fill="rgba(0,0,0,.15)"/>`+
+  `<rect x="-115" y="-46" width="230" height="7" fill="${c[1]}"/><rect x="-115" y="-20" width="230" height="7" fill="${c[1]}"/>`+
+  `<rect x="-12" y="-52" width="24" height="20" rx="3" fill="${c[1]}"/>`});
+
+/* ----- rug ----- */
+D.rug=(c,v)=>{
+  const w=440,h=140,q=`M-150 ${-h} L150 ${-h} L220 0 L-220 0 Z`;
+  const cid="rc"+Math.random().toString(36).slice(2,8);
+  let inner="";
+  if(v==="check"){for(let r=0;r<5;r++)for(let k=0;k<9;k++)if((r+k)%2)inner+=`<rect x="${-220+k*49}" y="${-h+r*28}" width="49" height="28" fill="${c[0]}"/>`;}
+  else if(v==="kilim"){for(let r=0;r<6;r++)inner+=`<rect x="-220" y="${-h+r*23}" width="440" height="${r%2?7:14}" fill="${r%2?c[2]:c[1]}"/>`;
+    for(let k=0;k<9;k++)inner+=`<path d="M${-190+k*47} ${-h/2-18} l20 18 l-20 18 l-20 -18 Z" fill="${c[0]}" opacity=".85"/>`;}
+  else if(v==="floral"){for(let i=0;i<22;i++){const x=-200+((i*67)%400),y=-h+8+((i*41)%(h-16));
+    inner+=`<g transform="translate(${x} ${y})">${[0,72,144,216,288].map(a=>`<ellipse cy="-7" rx="5" ry="9" fill="${c[2]}" transform="rotate(${a})"/>`).join("")}<circle r="3.4" fill="${c[1]}"/></g>`;}}
+  else if(v==="gradient"){inner=`<rect x="-220" y="${-h}" width="440" height="${h}" fill="url(#gradRug)"/>`;}
+  else if(v==="jute"){for(let i=0;i<9;i++)inner+=`<ellipse cx="0" cy="${-h/2}" rx="${210-i*22}" ry="${h/2-i*7}" fill="none" stroke="${i%2?c[0]:c[1]}" stroke-width="7"/>`;}
+  else if(v==="shag"){for(let i=0;i<170;i++){const x=-215+((i*97)%430),y=-h+4+((i*53)%(h-8));
+    inner+=`<line x1="${x}" y1="${y}" x2="${x+4}" y2="${y-9}" stroke="${i%3?c[1]:c[0]}" stroke-width="3" opacity=".8"/>`;}}
+  else{inner=`<rect x="-220" y="${-h}" width="440" height="${h}" fill="${c[1]}" opacity=".6"/>`;}
+  return{w,h,s:`<defs><clipPath id="${cid}"><path d="${q}"/></clipPath></defs>`+
+    `<path d="${q}" fill="${c[0]}"/><g clip-path="url(#${cid})">${inner}</g>`+
+    `<path d="${q}" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="2"/>`};
+};
+
+/* ----- desk ----- */
+D.lamp=(c,v)=>{
+  if(v==="mushroom")return{w:110,h:130,s:`<rect x="-9" y="-74" width="18" height="66" fill="${c[0]}"/><ellipse cx="0" cy="-6" rx="30" ry="9" fill="${c[0]}"/>`+
+    `<path d="M-52 -74 a52 46 0 0 1 104 0 Z" fill="${c[0]}"/><path d="M-52 -74 a52 46 0 0 1 104 0 Z" fill="#fff" opacity=".18"/>`+
+    `<ellipse cx="0" cy="-72" rx="52" ry="7" fill="${c[1]}"/><g class="lightsource" data-lx="0" data-ly="-70"></g>`};
+  if(v==="banker")return{w:120,h:140,s:`<ellipse cx="0" cy="-5" rx="32" ry="10" fill="${c[0]}"/><rect x="-5" y="-96" width="10" height="92" fill="${c[0]}"/>`+
+    `<path d="M-46 -96 a46 30 0 0 1 92 0 l0 16 l-92 0 Z" fill="${c[1]}"/><path d="M-46 -80 l92 0 l0 6 l-92 0 Z" fill="${c[0]}"/><g class="lightsource" data-lx="0" data-ly="-78"></g>`};
+  return{w:150,h:180,s:`<ellipse cx="-40" cy="-6" rx="30" ry="10" fill="${c[0]}"/><rect x="-46" y="-140" width="9" height="136" fill="${c[0]}"/>`+
+    `<rect x="-46" y="-146" width="96" height="9" rx="4" fill="${c[0]}" transform="rotate(12 -42 -142)"/>`+
+    `<path d="M36 -122 l44 -18 l16 34 l-44 18 Z" fill="${c[0]}"/><path d="M40 -110 l40 -16 l6 12 l-40 16 Z" fill="${c[1]}"/><g class="lightsource" data-lx="66" data-ly="-108"></g>`};
+};
+D.screen=(c,v)=>{
+  if(v==="monitor")return{w:300,h:200,s:`<rect x="-24" y="-40" width="48" height="34" fill="${c[0]}"/><ellipse cx="0" cy="-5" rx="60" ry="10" fill="${c[0]}"/>`+
+    `<path d="M-140 -186 q140 24 280 0 l0 148 q-140 24 -280 0 Z" fill="${c[0]}"/>`+
+    `<path d="M-130 -178 q130 22 260 0 l0 132 q-130 22 -260 0 Z" fill="#0F1220"/>`+
+    `<path d="M-130 -178 q130 22 260 0 l0 132 q-130 22 -260 0 Z" fill="${c[1]}" opacity=".35"/>`+
+    `<path d="M-140 -186 q140 24 280 0 l0 12 q-140 24 -280 0 Z" fill="${c[1]}" opacity=".9" filter="url(#glow)"/>`};
+  return{w:200,h:130,s:`<path d="M-96 -10 L96 -10 L82 -96 L-82 -96 Z" fill="${c[0]}"/><path d="M-86 -16 L86 -16 L74 -90 L-74 -90 Z" fill="${c[1]}" opacity=".25"/>`+
+    `<rect x="-78" y="-126" width="156" height="112" rx="4" fill="${c[0]}"/><rect x="-71" y="-119" width="142" height="98" rx="2" fill="#1B2030"/>`+
+    `<rect x="-71" y="-119" width="142" height="98" rx="2" fill="#7FB3C4" opacity=".3"/>`};
+};
+D.books=c=>{const w=120,h=110;let s="";
+  [[0,-22,104,22,c[0]],[4,-44,96,22,c[1]],[-2,-64,100,20,c[2]],[6,-82,86,18,c[0]]].forEach(([x,y,bw,bh,col])=>{
+    s+=`<rect x="${x-bw/2}" y="${y}" width="${bw}" height="${bh}" rx="2" fill="${col}"/><rect x="${x-bw/2+5}" y="${y+4}" width="${bw-10}" height="3" fill="rgba(255,255,255,.3)"/>`;});
+  s+=`<rect x="-16" y="-108" width="34" height="26" rx="3" fill="${c[2]}" transform="rotate(-12 0 -95)"/>`;
+  return{w,h,s};};
+D.plant=(c,v)=>{
+  if(v==="monstera"){const w=230,h=330;let s=`<path d="M-46 0 l-8 -74 h108 l-8 74 Z" fill="${c[1]}"/><rect x="-52" y="-84" width="104" height="16" rx="4" fill="${c[1]}"/>`;
+    const L=[[-70,-150,1.5,-150],[62,-140,1.4,-30],[-40,-232,1.35,-118],[46,-224,1.3,-56],[0,-286,1.2,-90],[-84,-196,1.1,-160],[80,-192,1.05,-20]];
+    L.forEach(([x,y,sc,rot])=>{s+=`<line x1="0" y1="-70" x2="${x}" y2="${y}" stroke="${c[0]}" stroke-width="5"/>`+
+      `<g transform="translate(${x} ${y}) rotate(${rot}) scale(${sc})"><path d="M0 0 C10 -34 44 -46 62 -30 C78 -16 68 22 32 30 C14 34 2 20 0 0 Z" fill="${c[0]}"/>`+
+      `<path d="M18 -22 l16 8 M30 -4 l18 4 M20 12 l16 -2" stroke="rgba(255,255,255,.35)" stroke-width="3"/></g>`;});
+    return{w,h,s};}
+  if(v==="snake"){const w=150,h=290;let s=`<path d="M-40 0 l-6 -60 h92 l-6 60 Z" fill="${c[1]}"/>`;
+    for(let i=0;i<7;i++){const x=-36+i*12,ht=140+((i*53)%120),lean=(i-3)*7;
+      s+=`<path d="M${x} -58 q${lean} ${-ht*.6} ${lean*2.2} ${-ht} q6 -6 10 0 q${-lean*1.6} ${ht*.5} ${-lean*1.4} ${ht} Z" fill="${i%2?c[0]:"#57804F"}"/>`;}
+    return{w,h,s};}
+  if(v==="pampas"){const w=200,h=300;let s=`<path d="M-30 0 q-16 -80 6 -110 h48 q22 30 6 110 Z" fill="${c[1]}"/>`;
+    for(let i=0;i<9;i++){const x=(i-4)*15,tip=-150-((i*41)%110);
+      s+=`<path d="M0 -104 q${x*.6} ${tip*.5} ${x} ${tip}" stroke="${c[0]}" stroke-width="3" fill="none"/>`+
+      `<ellipse cx="${x}" cy="${tip}" rx="9" ry="26" fill="${c[0]}" opacity=".8" transform="rotate(${x*.3} ${x} ${tip})"/>`;}
+    return{w,h,s};}
+  const w=90,h=110;let s=`<path d="M-26 0 l-4 -44 h60 l-4 44 Z" fill="${c[1]}"/><rect x="-32" y="-50" width="64" height="10" rx="3" fill="${c[1]}"/>`;
+  for(let i=0;i<6;i++)s+=leafPath(0,-52,.45,-180+i*36,c[0]);
+  return{w,h,s};
+};
+D.candles=c=>{const w=120,h=96;let s="";
+  [[-34,58,c[1]],[0,80,c[0]],[32,44,c[2]]].forEach(([x,ht,col])=>{
+    s+=`<rect x="${x-13}" y="${-ht}" width="26" height="${ht}" rx="4" fill="${col}"/>`+
+    `<path d="M${x-13} ${-ht+10} q13 -8 26 0" fill="#fff" opacity=".2"/>`+
+    `<path d="M${x} ${-ht-16} q7 8 0 14 q-7 -6 0 -14 Z" fill="#FFB03A"/><g class="lightsource" data-lx="${x}" data-ly="${-ht-10}"></g>`;});
+  return{w,h,s};};
+D.speaker=c=>({w:90,h:96,s:`<rect x="-40" y="-90" width="80" height="90" rx="10" fill="${c[0]}"/>`+
+  Array.from({length:5},(_,r)=>Array.from({length:5},(_,k)=>`<circle cx="${-26+k*13}" cy="${-76+r*15}" r="3.4" fill="rgba(255,255,255,.16)"/>`).join("")).join("")+
+  `<rect x="-22" y="-16" width="44" height="6" rx="3" fill="${c[1]}"/>`});
+D.organizer=c=>({w:120,h:100,s:`<rect x="-52" y="-52" width="104" height="52" rx="6" fill="${c[0]}"/>`+
+  `<rect x="-52" y="-52" width="104" height="10" rx="5" fill="rgba(0,0,0,.1)"/><line x1="0" y1="-52" x2="0" y2="0" stroke="rgba(0,0,0,.12)" stroke-width="2"/>`+
+  [[-34,-96,c[1]],[-22,-84,"#C4553B"],[26,-90,"#3E5C4A"],[36,-78,c[1]]].map(([x,y,col])=>`<rect x="${x}" y="${y}" width="7" height="${-y-46}" rx="3" fill="${col}"/>`).join("")});
+D.frames=c=>({w:150,h:110,s:framed(-36,-98,72,96,c[0],"#fff",[c[1],"#8C806E",c[0]],2)+framed(42,-80,66,78,c[0],"#fff",[c[1],"#B8815A",c[0]],4)});
+
+/* ----- chair ----- */
+D.chair=(c,v)=>{
+  if(v==="gaming")return{w:200,h:300,s:`<path d="M-70 0 l70 -26 l70 26 Z" fill="${c[0]}"/><rect x="-9" y="-96" width="18" height="70" fill="#3A3D4C"/>`+
+    `<rect x="-72" y="-140" width="144" height="46" rx="12" fill="${c[0]}"/>`+
+    `<path d="M-64 -140 q-14 -150 12 -156 l104 0 q26 6 12 156 Z" fill="${c[0]}"/>`+
+    `<path d="M-42 -150 q-8 -122 8 -128 l68 0 q16 6 8 128 Z" fill="${c[1]}" opacity=".55"/>`+
+    `<rect x="-78" y="-136" width="18" height="52" rx="8" fill="${c[1]}"/><rect x="60" y="-136" width="18" height="52" rx="8" fill="${c[1]}"/>`};
+  if(v==="wood")return{w:170,h:250,s:`<rect x="-60" y="-14" width="12" height="14" fill="${c[1]}"/><rect x="48" y="-14" width="12" height="14" fill="${c[1]}"/>`+
+    `<rect x="-64" y="-104" width="128" height="16" rx="6" fill="${c[0]}"/>`+
+    `<rect x="-60" y="-88" width="10" height="76" fill="${c[1]}"/><rect x="50" y="-88" width="10" height="76" fill="${c[1]}"/>`+
+    `<path d="M-56 -104 l4 -104 l104 0 l4 104" fill="none" stroke="${c[0]}" stroke-width="11" stroke-linecap="round"/>`+
+    Array.from({length:5},(_,i)=>`<line x1="${-40+i*20}" y1="-112" x2="${-38+i*20}" y2="-198" stroke="${c[1]}" stroke-width="7" stroke-linecap="round"/>`).join("")};
+  if(v==="saucer")return{w:230,h:190,s:`<path d="M-62 0 l52 -60 M62 0 l-52 -60 M-62 0 l124 0" stroke="${c[1]}" stroke-width="8" stroke-linecap="round" fill="none"/>`+
+    `<ellipse cx="0" cy="-108" rx="112" ry="66" fill="${c[0]}"/><ellipse cx="0" cy="-116" rx="96" ry="52" fill="rgba(0,0,0,.09)"/>`+
+    Array.from({length:26},(_,i)=>`<path d="M${-110+i*8.6} ${-108+Math.sin(i)*22} q4 -10 8 0" stroke="#fff" stroke-width="3" fill="none" opacity=".35"/>`).join("")};
+  if(v==="stool")return{w:130,h:150,s:`<path d="M-46 0 l14 -60 M46 0 l-14 -60 M-40 -26 l80 0" stroke="${c[1]}" stroke-width="7" fill="none" stroke-linecap="round"/>`+
+    `<ellipse cx="0" cy="-72" rx="56" ry="20" fill="${c[0]}"/><rect x="-56" y="-72" width="112" height="16" fill="${c[0]}"/><ellipse cx="0" cy="-56" rx="56" ry="18" fill="${c[0]}"/>`+
+    `<ellipse cx="0" cy="-76" rx="46" ry="14" fill="#fff" opacity=".12"/>`};
+  return{w:190,h:270,s:`<path d="M-58 0 l58 -22 l58 22 M-42 -12 l84 0" stroke="${c[1]}" stroke-width="7" fill="none" stroke-linecap="round"/>`+
+    `<rect x="-8" y="-92" width="16" height="70" fill="${c[1]}"/><ellipse cx="0" cy="-96" rx="66" ry="20" fill="${c[0]}"/>`+
+    `<path d="M-56 -110 q56 -22 112 0 l0 22 q-56 20 -112 0 Z" fill="${c[0]}"/>`+
+    `<path d="M-50 -118 q6 -110 50 -112 q44 2 50 112 Z" fill="${c[0]}"/>`+
+    Array.from({length:7},(_,i)=>`<line x1="${-40+i*13}" y1="-126" x2="${-40+i*13}" y2="-216" stroke="rgba(255,255,255,.12)" stroke-width="4"/>`).join("")};
+};
+
+/* ----- corner ----- */
+D.floorlamp=(c,v)=>{
+  if(v==="arc")return{w:280,h:420,s:`<ellipse cx="-96" cy="-6" rx="46" ry="12" fill="${c[0]}"/>`+
+    `<path d="M-96 -14 q-6 -300 130 -352" stroke="${c[0]}" stroke-width="8" fill="none"/>`+
+    `<path d="M18 -356 l52 -16 l14 46 l-52 16 Z" fill="${c[0]}"/><ellipse cx="60" cy="-338" rx="24" ry="8" fill="${c[1]}"/><g class="lightsource" data-lx="52" data-ly="-336"></g>`};
+  if(v==="paper")return{w:180,h:400,s:`<ellipse cx="0" cy="-6" rx="40" ry="11" fill="#8C806E"/><rect x="-4" y="-250" width="8" height="244" fill="#8C806E"/>`+
+    `<ellipse cx="0" cy="-260" rx="76" ry="70" fill="${c[0]}"/>`+
+    Array.from({length:7},(_,i)=>`<ellipse cx="0" cy="-260" rx="${76-Math.abs(i-3)*9}" ry="70" fill="none" stroke="rgba(0,0,0,.08)" stroke-width="2" transform="translate(0 ${(i-3)*18}) scale(1 .3)"/>`).join("")+
+    `<g class="lightsource" data-lx="0" data-ly="-250"></g>`};
+  return{w:220,h:400,s:`<path d="M0 -300 l-70 292 M0 -300 l70 292 M0 -300 l0 292" stroke="${c[0]}" stroke-width="9" stroke-linecap="round" fill="none"/>`+
+    `<path d="M-64 -300 l128 0 l-26 -84 l-76 0 Z" fill="${c[1]}"/><ellipse cx="0" cy="-384" rx="38" ry="8" fill="${c[1]}"/><g class="lightsource" data-lx="0" data-ly="-330"></g>`};
+};
+D.beanbag=c=>({w:260,h:180,s:`<path d="M-128 0 q-16 -110 60 -142 q68 -28 128 12 q56 38 40 130 Z" fill="${c[0]}"/>`+
+  `<path d="M-128 0 q-16 -110 60 -142 q-6 60 -6 142 Z" fill="${c[1]}" opacity=".55"/>`+
+  `<path d="M-70 -142 q60 40 62 142" stroke="rgba(0,0,0,.14)" stroke-width="3" fill="none"/>`+
+  `<path d="M18 -152 q54 44 52 152" stroke="rgba(0,0,0,.1)" stroke-width="3" fill="none"/>`});
+D.fridge=c=>({w:200,h:250,s:`<rect x="-96" y="-250" width="192" height="250" rx="10" fill="${c[0]}"/>`+
+  `<rect x="-96" y="-250" width="192" height="66" rx="10" fill="${c[1]}" opacity=".7"/>`+
+  `<line x1="-96" y1="-184" x2="96" y2="-184" stroke="rgba(0,0,0,.18)" stroke-width="3"/>`+
+  `<rect x="66" y="-176" width="10" height="60" rx="5" fill="rgba(0,0,0,.3)"/><rect x="66" y="-238" width="10" height="34" rx="5" fill="rgba(0,0,0,.3)"/>`+
+  `<rect x="-70" y="-160" width="52" height="34" rx="4" fill="${c[1]}" transform="rotate(-6 -44 -143)"/>`});
+D.ladder=c=>{const w=230,h=420;let s=`<path d="M-92 0 l22 -420 M92 0 l-22 -420" stroke="${c[0]}" stroke-width="11" stroke-linecap="round" fill="none"/>`;
+  [0,1,2,3].forEach(i=>{const y=-70-i*104,hw=88-i*11;
+    s+=`<rect x="${-hw}" y="${y}" width="${hw*2}" height="10" rx="3" fill="${c[0]}"/>`;
+    if(i<3){for(let k=0;k<3;k++)s+=`<rect x="${-hw+14+k*15}" y="${y-40-(k%2)*8}" width="12" height="${40+(k%2)*8}" rx="2" fill="${k%2?c[1]:"#C4553B"}"/>`;
+      s+=`<path d="M${hw-40} ${y} l-4 -26 h30 l-4 26 Z" fill="#C98B6B"/>`+leafPath(hw-25,-8+y-26,.4,-150,c[1])+leafPath(hw-25,y-30,.4,-40,c[1]);}});
+  return{w,h,s};};
+D.guitar=c=>({w:170,h:400,s:`<path d="M-30 -8 l60 0 l-8 -50 l-44 0 Z" fill="#5A554D"/>`+
+  `<g transform="rotate(-9 0 -120)"><path d="M0 -60 q64 0 64 62 q0 44 -40 52 q40 16 40 66 q0 66 -64 66 q-64 0 -64 -66 q0 -50 40 -66 q-40 -8 -40 -52 q0 -62 64 -62 Z" fill="${c[0]}"/>`+
+  `<circle cx="0" cy="-180" r="26" fill="#2A2A2A"/><rect x="-13" y="-300" width="26" height="130" fill="${c[1]}"/>`+
+  `<rect x="-18" y="-336" width="36" height="40" rx="5" fill="${c[1]}"/>`+
+  Array.from({length:6},(_,i)=>`<line x1="${-11+i*4.4}" y1="-330" x2="${-11+i*4.4}" y2="-110" stroke="rgba(255,255,255,.5)" stroke-width="1.2"/>`).join("")+`</g>`});
+D.tallmirror=c=>({w:180,h:420,s:`<path d="M-70 0 L-70 -300 A70 70 0 0 1 70 -300 L70 0 Z" fill="${c[0]}" transform="rotate(3 0 0)"/>`+
+  `<path d="M-58 -12 L-58 -300 A58 58 0 0 1 58 -300 L58 -12 Z" fill="${c[1]}" transform="rotate(3 0 0)"/>`+
+  `<path d="M-58 -12 L-58 -280 L20 -12 Z" fill="#fff" opacity=".3" transform="rotate(3 0 0)"/>`});
+D.fan=c=>({w:200,h:330,s:`<ellipse cx="0" cy="-6" rx="52" ry="13" fill="${c[1]}"/><rect x="-7" y="-190" width="14" height="184" fill="${c[1]}"/>`+
+  `<circle cx="0" cy="-244" r="76" fill="none" stroke="${c[0]}" stroke-width="9"/>`+
+  Array.from({length:5},(_,i)=>`<circle cx="0" cy="-244" r="${16+i*13}" fill="none" stroke="${c[0]}" stroke-width="2.5" opacity=".7"/>`).join("")+
+  Array.from({length:4},(_,i)=>`<path d="M0 -244 q40 -20 52 12 q-30 20 -52 -12 Z" fill="${c[0]}" opacity=".85" transform="rotate(${i*90} 0 -244)"/>`).join("")+
+  `<circle cx="0" cy="-244" r="13" fill="${c[1]}"/>`});
+/* photo card — for products pulled in from a real listing */
+const PHOTO_SIZE={wall:[230,270],window:[220,300],ceiling:[170,170],bed:[240,150],under:[190,64],
+  rug:[330,120],desk:[110,120],chair:[170,200],corner:[190,250]};
+D.photo=(c,v,A,p)=>{
+  const [w,h]=PHOTO_SIZE[p.z]||[180,200], pad=9;
+  const id=nid("ph");
+  return{w,h,s:`<defs><clipPath id="${id}"><rect x="${-w/2+pad}" y="${-h+pad}" width="${w-pad*2}" height="${h-pad*2}" rx="4"/></clipPath></defs>`+
+    `<rect x="${-w/2}" y="${-h}" width="${w}" height="${h}" rx="7" fill="#fff" stroke="rgba(0,0,0,.16)"/>`+
+    (p.img?`<image href="${esc(p.img)}" x="${-w/2+pad}" y="${-h+pad}" width="${w-pad*2}" height="${h-pad*2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id})"/>`
+          :`<rect x="${-w/2+pad}" y="${-h+pad}" width="${w-pad*2}" height="${h-pad*2}" rx="4" fill="#EFE9DF"/>`+
+           `<text x="0" y="${-h/2}" text-anchor="middle" font-size="13" fill="#8C867C" font-family="Inter,sans-serif">${esc(p.n.slice(0,18))}</text>`)+
+    `<ellipse cx="0" cy="6" rx="${w*.42}" ry="7" fill="rgba(0,0,0,.16)"/>`};
+};
+
+/* ============================================================
+   5. THE ROOM ITSELF
+   ============================================================ */
+const hex2rgb=h=>{const x=h.replace("#","");const f=x.length===3?x.split("").map(c=>c+c).join(""):x;
+  return [0,2,4].map(i=>parseInt(f.slice(i,i+2),16)||0);};
+const mix=(a,b,t)=>"#"+hex2rgb(a).map((v,i)=>Math.round(v+(hex2rgb(b)[i]-v)*t).toString(16).padStart(2,"0")).join("");
+const dark=(h,t)=>mix(h,"#0E1424",t);
+
+function floorSVG(T,night){
+  const f=night?dark(T.floor,.5):T.floor;
+  let s=`<rect x="0" y="558" width="1200" height="262" fill="${f}"/>`;
+  if(T.fl==="wood"){
+    for(let i=0;i<7;i++){const y=566+i*i*4+i*22;
+      s+=`<line x1="0" y1="${y}" x2="1200" y2="${y}" stroke="rgba(0,0,0,.14)" stroke-width="1.5"/>`;}
+    for(let i=0;i<26;i++){const x=((i*173)%1200),y=566+((i*97)%240);
+      s+=`<line x1="${x}" y1="${y}" x2="${x}" y2="${y+26}" stroke="rgba(0,0,0,.1)" stroke-width="1.5"/>`;}
+  }else if(T.fl==="seagrass"){
+    for(let i=0;i<30;i++)s+=`<line x1="${i*42}" y1="558" x2="${i*42-40}" y2="820" stroke="rgba(0,0,0,.07)" stroke-width="9"/>`;
+    for(let i=0;i<9;i++)s+=`<line x1="0" y1="${566+i*30}" x2="1200" y2="${566+i*30}" stroke="rgba(255,255,255,.13)" stroke-width="7"/>`;
+  }else{
+    for(let i=0;i<420;i++){const x=(i*191)%1200,y=560+((i*127)%258);
+      s+=`<circle cx="${x}" cy="${y}" r="1.5" fill="rgba(0,0,0,.06)"/>`;}
+  }
+  s+=`<rect x="0" y="558" width="1200" height="46" fill="url(#floorFade)"/>`;
+  return s;
+}
+function windowSVG(night){
+  const x=840,y=108,w=264,h=254;
+  let sky=night
+    ? `<rect x="${x+8}" y="${y+8}" width="${w-16}" height="${h-16}" fill="url(#skyNight)"/>`+
+      `<circle cx="${x+w-64}" cy="${y+62}" r="20" fill="#F6EFD8"/><circle cx="${x+w-54}" cy="${y+56}" r="18" fill="#2C3A5C"/>`+
+      Array.from({length:22},(_,i)=>`<circle cx="${x+18+((i*71)%(w-36))}" cy="${y+16+((i*53)%(h-40))}" r="${1.2+(i%3)*.6}" fill="#fff" opacity="${.4+(i%4)*.15}"/>`).join("")
+    : `<rect x="${x+8}" y="${y+8}" width="${w-16}" height="${h-16}" fill="url(#skyDay)"/>`+
+      `<circle cx="${x+64}" cy="${y+58}" r="30" fill="#FFF3D0" opacity=".8"/>`+
+      `<path d="M${x+8} ${y+h-46} q60 -40 120 -6 q50 -34 128 -2 l0 40 l-248 0 Z" fill="#8FA97C" opacity=".75"/>`+
+      `<circle cx="${x+70}" cy="${y+h-72}" r="34" fill="#7E9A6C" opacity=".8"/><rect x="${x+64}" y="${y+h-56}" width="10" height="30" fill="#8C6B4A"/>`;
+  return `<rect x="${x-10}" y="${y-10}" width="${w+20}" height="${h+20}" rx="4" fill="#E9E4D9"/>`+
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#3A3D4C"/>`+sky+
+    `<rect x="${x+w/2-5}" y="${y}" width="10" height="${h}" fill="#E9E4D9"/>`+
+    `<rect x="${x}" y="${y+h/2-5}" width="${w}" height="10" fill="#E9E4D9"/>`+
+    `<rect x="${x-10}" y="${y+h+10}" width="${w+20}" height="14" rx="3" fill="#DED8CB"/>`+
+    `<rect x="${x-10}" y="${y-10}" width="${w+20}" height="${h+20}" rx="4" fill="none" stroke="rgba(0,0,0,.14)" stroke-width="2"/>`;
+}
+function shellSVG(T,night){
+  const wall=night?dark(T.wall,.46):T.wall;
+  return `<rect x="0" y="0" width="1200" height="562" fill="${wall}"/>`+
+    `<rect x="0" y="0" width="1200" height="562" fill="url(#block)" opacity=".5"/>`+
+    `<rect x="0" y="0" width="1200" height="562" fill="url(#wallVig)"/>`+
+    windowSVG(night)+
+    /* radiator under the window */
+    `<rect x="856" y="446" width="232" height="96" rx="6" fill="${mix(wall,"#8C867C",.35)}"/>`+
+    Array.from({length:13},(_,i)=>`<rect x="${864+i*17}" y="452" width="8" height="84" rx="4" fill="rgba(0,0,0,.13)"/>`).join("")+
+    /* light switch + outlet */
+    `<rect x="676" y="392" width="26" height="40" rx="3" fill="${mix(wall,"#fff",.5)}" stroke="rgba(0,0,0,.12)"/>`+
+    `<rect x="684" y="402" width="10" height="20" rx="2" fill="rgba(0,0,0,.15)"/>`+
+    `<rect x="0" y="534" width="1200" height="28" fill="${mix(wall,"#fff",.26)}"/>`+
+    `<rect x="0" y="534" width="1200" height="3" fill="rgba(0,0,0,.10)"/>`+
+    floorSVG(T,night);
+}
+function furnitureSVG(night){
+  const metal=night?"#6E6A63":"#9A958C", wood=night?"#7A6046":"#C2A277";
+  return `<ellipse cx="240" cy="704" rx="186" ry="14" fill="rgba(0,0,0,.13)"/>`+
+    /* twin bed frame */
+    `<rect x="58" y="470" width="15" height="232" rx="7" fill="${metal}"/><rect x="86" y="470" width="15" height="232" rx="7" fill="${metal}"/>`+
+    `<rect x="58" y="482" width="43" height="10" rx="5" fill="${metal}"/><rect x="58" y="516" width="43" height="10" rx="5" fill="${metal}"/>`+
+    `<rect x="392" y="524" width="15" height="178" rx="7" fill="${metal}"/><rect x="416" y="524" width="15" height="178" rx="7" fill="${metal}"/>`+
+    `<rect x="392" y="536" width="39" height="10" rx="5" fill="${metal}"/>`+
+    `<rect x="70" y="628" width="352" height="14" rx="5" fill="${metal}"/>`+
+    `<rect x="76" y="592" width="338" height="40" rx="9" fill="${night?"#C6C0B4":"#EFEAE0"}"/>`+
+    `<path d="M76 606 h338" stroke="rgba(0,0,0,.08)" stroke-width="2"/>`+
+    /* desk */
+    `<ellipse cx="930" cy="726" rx="180" ry="12" fill="rgba(0,0,0,.13)"/>`+
+    `<rect x="756" y="588" width="350" height="17" rx="4" fill="${wood}"/>`+
+    `<rect x="756" y="601" width="350" height="6" fill="rgba(0,0,0,.15)"/>`+
+    `<rect x="762" y="605" width="17" height="120" rx="3" fill="${mix(wood,"#000",.2)}"/>`+
+    `<rect x="1084" y="605" width="17" height="120" rx="3" fill="${mix(wood,"#000",.2)}"/>`+
+    `<rect x="964" y="605" width="132" height="118" rx="4" fill="${mix(wood,"#000",.08)}"/>`+
+    Array.from({length:3},(_,i)=>`<rect x="972" y="${612+i*38}" width="116" height="32" rx="3" fill="${wood}"/>`+
+      `<rect x="1012" y="${625+i*38}" width="36" height="6" rx="3" fill="rgba(0,0,0,.3)"/>`).join("");
+}
+
+/* ============================================================
+   6. THE VIBE ENGINE
+   ============================================================ */
+const STOP=new Set("a an the i im my me we you it its is are am be was were and or but of to in on at for with without from that this these those very really quite lots lot more most some any all want wants wanted like likes liked love loves need needs looking look feel feels vibe vibes room dorm stuff things thing kind sort would could should make makes making please thanks give me my got have has had do does going go get".split(" "));
+const NEG=new Set("no not never none nothing without hate hates hating avoid avoiding dislike anti less least neither nor".split(" "));
+
+function tokenize(t){return (t||"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>1&&!STOP.has(w));}
+function stem(w){return w.length>4&&w.endsWith("s")?w.slice(0,-1):w;}
+
+function analyze(){
+  const raw=(state.text||"").toLowerCase();
+  const words=tokenize(raw);
+  /* anything within 3 words after a negation cue is a "don't" */
+  const negs=new Set(), pos=[];
+  const seq=raw.split(/[^a-z0-9]+/).filter(Boolean);
+  let ban=0;
+  seq.forEach(w=>{
+    if(NEG.has(w)){ban=3;return;}
+    if(/^[.,;!]/.test(w)) ban=0;
+    if(ban>0&&!STOP.has(w)&&w.length>2){negs.add(stem(w));ban--;}
+  });
+  words.forEach(w=>{if(!negs.has(stem(w)))pos.push(stem(w));});
+  if(state.accent!=="none"&&ACCENT_WORDS[state.accent])
+    tokenize(ACCENT_WORDS[state.accent]).forEach(w=>pos.push(stem(w)));
+
+  const weights={};
+  VIBES.forEach(v=>{
+    const kw=v.kw.split(" ");
+    let hit=0;
+    pos.forEach(w=>{if(kw.some(k=>k===w||k.startsWith(w)&&w.length>3))hit+=1;});
+    let anti=0;
+    negs.forEach(w=>{if(kw.some(k=>k===w||k.startsWith(w)&&w.length>3))anti+=1;});
+    weights[v.id]=hit-anti*1.6;
+  });
+  state.chips.forEach(id=>{weights[id]=(weights[id]||0)+3;});
+  const ranked=VIBES.map(v=>({v,w:weights[v.id]||0})).sort((a,b)=>b.w-a.w);
+  return {weights,pos:[...new Set(pos)],negs,ranked,top:ranked.filter(r=>r.w>0)};
+}
+
+function scoreProduct(p,an){
+  let s=0; const why=[];
+  VIBES.forEach(v=>{
+    const w=an.weights[v.id]||0;
+    if(!w) return;
+    if(p.t.includes(v.id)){ s+=w*2.4; if(w>0)why.push(v.label.toLowerCase()); }
+  });
+  an.pos.forEach(w=>{
+    if(w.length<3)return;
+    if(p.t.split(" ").some(t=>t===w||t.startsWith(w))||p.n.toLowerCase().includes(w)){s+=2.6;why.push(w);}
+  });
+  an.negs.forEach(w=>{
+    if(w.length<3)return;
+    if(p.t.split(" ").some(t=>t===w||t.startsWith(w))||p.n.toLowerCase().includes(w))s-=9;
+  });
+  if(p.custom)s+=40;                       /* things you pulled in yourself always win */
+  return {score:s,why:[...new Set(why)].slice(0,3)};
+}
+
+function currentTheme(){
+  const an=analyze();
+  if(!an.top.length)return {wall:"#E6E1D6",floor:"#BEB5A4",fl:"carpet",warm:0,glow:"#FFD9A0",label:"Undecided"};
+  const a=an.top[0].v.theme, label=an.top[0].v.label;
+  if(an.top[1]&&an.top[1].w>=an.top[0].w*.6){
+    const b=an.top[1].v.theme, t=.42;
+    return {wall:mix(a.wall,b.wall,t),floor:mix(a.floor,b.floor,t),fl:a.fl,warm:a.warm||b.warm,
+      glow:mix(a.glow,b.glow,t),label:label+" + "+an.top[1].v.label};
+  }
+  return {...a,label};
+}
+/* ============================================================
+   7. STATE
+   ============================================================ */
+const state={text:"",chips:new Set(),accent:"none",budget:700,night:false,slots:{},custom:[],sel:null};
+const svg=$("#room");
+let uid=0; const nid=p=>p+(++uid);
+const allProducts=()=>CATALOG.concat(state.custom);
+const productOf=id=>BY_ID[id]||state.custom.find(p=>p.id===id)||null;
+const accentHex=()=>{const a=ACCENTS.find(a=>a.id===state.accent);return a&&a.id!=="none"?a.hex:null;};
+const placed=()=>Object.entries(state.slots).filter(([,v])=>v&&productOf(v.pid));
+const totalCost=()=>placed().reduce((n,[,v])=>n+(productOf(v.pid).p||0),0);
+
+function defsSVG(T){
+  return `<defs>
+    <filter id="glow" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="9"/></filter>
+    <linearGradient id="skyDay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A8CBE0"/><stop offset="1" stop-color="#E7F0EE"/></linearGradient>
+    <linearGradient id="skyNight" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#141C33"/><stop offset="1" stop-color="#37456B"/></linearGradient>
+    <linearGradient id="floorFade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(0,0,0,.16)"/><stop offset="1" stop-color="rgba(0,0,0,0)"/></linearGradient>
+    <linearGradient id="wallVig" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(0,0,0,.10)"/><stop offset=".45" stop-color="rgba(0,0,0,0)"/><stop offset="1" stop-color="rgba(0,0,0,.07)"/></linearGradient>
+    <linearGradient id="gradRug" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF9CC8"/><stop offset=".5" stop-color="#FFC272"/><stop offset="1" stop-color="#7A5CFF"/></linearGradient>
+    <radialGradient id="lampGlow"><stop offset="0" stop-color="${T.glow}" stop-opacity=".85"/><stop offset=".45" stop-color="${T.glow}" stop-opacity=".3"/><stop offset="1" stop-color="${T.glow}" stop-opacity="0"/></radialGradient>
+    <pattern id="block" width="120" height="60" patternUnits="userSpaceOnUse">
+      <path d="M0 30 H120 M0 60 H120 M0 0 V30 M60 30 V60" stroke="rgba(0,0,0,.055)" stroke-width="2" fill="none"/>
+    </pattern>
+  </defs>`;
+}
+function itemSVG(slotId,it){
+  const p=productOf(it.pid); if(!p||!D[p.d])return "";
+  const slot=SLOT_BY_ID[slotId];
+  const d=D[p.d](p.c,p.v,accentHex(),p);
+  const x=slot.x+(it.dx||0), y=slot.y+(it.dy||0), sc=it.scale||1;
+  const sel=state.sel===slotId;
+  return `<g class="hitbox${it.fresh?" item-enter":""}" data-slot="${slotId}" data-selected="${sel}" tabindex="0" role="button"`+
+    ` aria-label="${esc(p.n)}, ${slot.label}. Click to select, drag to move."`+
+    ` transform="translate(${x} ${y}) scale(${sc})">`+
+    d.s+
+    `<rect x="${-d.w/2}" y="${-d.h}" width="${d.w}" height="${d.h}" fill="transparent"/>`+
+    `<rect class="hit-outline" x="${-d.w/2-9}" y="${-d.h-9}" width="${d.w+18}" height="${d.h+18}" rx="10" fill="none" stroke="#C4553B" stroke-width="3" stroke-dasharray="9 7" vector-effect="non-scaling-stroke"/>`+
+    `</g>`;
+}
+function layerFor(slotId){
+  if(["wall-left","wall-center","window","ceiling"].includes(slotId))return "wall";
+  if(slotId==="rug")return "rug";
+  if(slotId==="under")return "under";
+  if(slotId==="chair")return "chair";
+  return "front";
+}
+function render(){
+  const T=currentTheme(), night=state.night;
+  const groups={wall:[],rug:[],under:[],front:[],chair:[]};
+  Object.entries(state.slots).forEach(([id,it])=>{
+    if(!it||!productOf(it.pid))return;
+    groups[layerFor(id)].push([id,it]);
+  });
+  /* nearer things (bigger baseline y) paint later */
+  groups.front.sort((a,b)=>(SLOT_BY_ID[a[0]].y+(a[1].dy||0))-(SLOT_BY_ID[b[0]].y+(b[1].dy||0)));
+  const draw=arr=>arr.map(([id,it])=>itemSVG(id,it)).join("");
+  svg.innerHTML=
+    `<title id="roomA11y">A dorm room: ${esc(T.label)} style, ${placed().length} items</title>`+
+    defsSVG(T)+
+    `<g id="l-shell">${shellSVG(T,night)}</g>`+
+    `<g id="l-wall">${draw(groups.wall)}</g>`+
+    `<g id="l-rug">${draw(groups.rug)}</g>`+
+    `<g id="l-under">${draw(groups.under)}</g>`+
+    `<g id="l-furn">${furnitureSVG(night)}</g>`+
+    `<g id="l-front">${draw(groups.front)}</g>`+
+    `<g id="l-chair">${draw(groups.chair)}</g>`+
+    `<g id="l-light" style="pointer-events:none"></g>`;
+  paintLights(T);
+  Object.values(state.slots).forEach(it=>{if(it)it.fresh=false;});
+  $("#emptyState").hidden=placed().length>0;
+  $("#roomTitle").textContent=roomTitleText(T);
+  $("#roomWhy").textContent=roomWhyText();
+  updateStats();
+}
+function paintLights(T){
+  const layer=$("#l-light"); if(!layer)return;
+  let s="";
+  if(state.night)s+=`<rect x="0" y="0" width="1200" height="820" fill="#101A2E" opacity=".58" style="mix-blend-mode:multiply"/>`;
+  let lit=0;
+  $$(".lightsource",svg).forEach(el=>{
+    let m=null; try{m=el.getCTM();}catch(e){}
+    if(!m)return;
+    const lx=+el.dataset.lx||0, ly=+el.dataset.ly||0;
+    const x=m.a*lx+m.c*ly+m.e, y=m.b*lx+m.d*ly+m.f;
+    lit++;
+    s+=`<circle cx="${x}" cy="${y}" r="${state.night?260:170}" fill="url(#lampGlow)" opacity="${state.night?1:.42}" style="mix-blend-mode:screen"/>`;
+  });
+  if(state.night&&!lit)s+=`<rect x="0" y="0" width="1200" height="820" fill="#0A1020" opacity=".25" style="mix-blend-mode:multiply"/>`;
+  layer.innerHTML=s;
+}
+function roomTitleText(T){
+  const n=placed().length;
+  if(!n)return "An empty double, waiting";
+  const an=analyze();
+  if(!an.top.length)return `Your room — ${n} things in it`;
+  return `${T.label} — ${n} things, ${money(totalCost())}`;
+}
+function roomWhyText(){
+  const an=analyze();
+  if(!placed().length)return "Say what you are into, hit Design my room, and this fills in.";
+  const bits=[];
+  if(an.top.length)bits.push("reading you as "+an.top.slice(0,2).map(r=>r.v.label.toLowerCase()).join(" + "));
+  const words=an.pos.filter(w=>w.length>3).slice(0,4);
+  if(words.length)bits.push("keying off “"+words.join(", ")+"”");
+  if(an.negs.size)bits.push("avoiding "+[...an.negs].slice(0,3).join(", "));
+  return bits.length?bits.join(" · "):"Drag anything to move it. Click to swap it out.";
+}
+function updateStats(){
+  const t=totalCost();
+  $("#statTotal").textContent=money(t);
+  $("#statTotal").style.color=t>state.budget?"#C4553B":"";
+  $("#statCount").textContent=placed().length;
+  $("#picksN").textContent="("+placed().length+")";
+}
+
+/* ============================================================
+   8. FILLING THE ROOM
+   ============================================================ */
+const FILL_ORDER=["bed","rug","wall-left","desk-1","window","chair","corner-1","ceiling","under","wall-center","desk-2","corner-2","desk-3"];
+function rankAll(){
+  const an=analyze();
+  return allProducts().map(p=>{const r=scoreProduct(p,an);return{p,score:r.score,why:r.why}})
+    .sort((a,b)=>b.score-a.score||a.p.p-b.p.p);
+}
+function autofill(){
+  const ranked=rankAll();
+  const keep={};                              /* things you pulled in stay put */
+  Object.entries(state.slots).forEach(([id,it])=>{
+    const p=it&&productOf(it.pid);
+    if(p&&p.custom)keep[id]=it;
+  });
+  const used=new Set(Object.values(keep).map(i=>i.pid));
+  const next={...keep};
+  let spend=Object.values(keep).reduce((n,i)=>n+(productOf(i.pid).p||0),0);
+  FILL_ORDER.forEach(slotId=>{
+    if(next[slotId])return;
+    const slot=SLOT_BY_ID[slotId];
+    let cands=ranked.filter(r=>r.p.z===slot.takes&&!used.has(r.p.id)&&r.score>-4);
+    if(!cands.length)return;
+    /* one lamp per desk is plenty — don't stack the same kind of thing in one zone */
+    const already=new Set(Object.entries(next)
+      .filter(([id])=>SLOT_BY_ID[id].takes===slot.takes)
+      .map(([,it])=>(productOf(it.pid)||{}).d));
+    const varied=cands.filter(r=>!already.has(r.p.d));
+    if(varied.length)cands=varied;
+    const room=state.budget-spend;
+    let pool=cands.filter(r=>r.p.p<=room);
+    if(!pool.length){
+      if(slotId!=="bed")return;               /* a bed needs bedding; everything else can wait */
+      pool=[...cands].sort((a,b)=>a.p.p-b.p.p).slice(0,1);
+    }
+    const best=pool[0].score;
+    const near=pool.filter(r=>r.score>=best-1.2).slice(0,3);
+    const chosen=pick(near);
+    next[slotId]={pid:chosen.p.id,dx:chosen.p.ox||0,dy:chosen.p.oy||0,scale:slot.sc||1,fresh:true};
+    used.add(chosen.p.id);
+    spend+=chosen.p.p;
+  });
+  state.slots=next;
+  state.sel=null;
+  selUI();
+  render();renderPicks();renderBrowse();save();
+  showTab("picks");
+}
+function placeProduct(pid,slotId){
+  const p=productOf(pid); if(!p)return;
+  if(!slotId){
+    const open=SLOTS.filter(s=>s.takes===p.z);
+    slotId=(open.find(s=>!state.slots[s.id])||open[0]||{}).id;
+  }
+  if(!slotId){toast("Nowhere to put that one.");return;}
+  /* no duplicates: pull it out of wherever it was */
+  Object.entries(state.slots).forEach(([id,it])=>{if(it&&it.pid===pid)delete state.slots[id];});
+  state.slots[slotId]={pid,dx:p.ox||0,dy:p.oy||0,scale:SLOT_BY_ID[slotId].sc||1,fresh:true};
+  state.sel=slotId;
+  selUI();render();renderPicks();renderBrowse();save();
+  toast(p.n+" → "+SLOT_BY_ID[slotId].label);
+}
+function removeSlot(slotId){
+  delete state.slots[slotId];
+  if(state.sel===slotId)state.sel=null;
+  selUI();render();renderPicks();renderBrowse();save();
+}
+function swapSlot(slotId){
+  const slot=SLOT_BY_ID[slotId], cur=state.slots[slotId];
+  const ranked=rankAll().filter(r=>r.p.z===slot.takes);
+  if(ranked.length<2)return;
+  const usedElsewhere=new Set(Object.entries(state.slots).filter(([id])=>id!==slotId).map(([,it])=>it.pid));
+  const avail=ranked.filter(r=>!usedElsewhere.has(r.p.id));
+  const i=avail.findIndex(r=>cur&&r.p.id===cur.pid);
+  const nextP=avail[(i+1)%avail.length];
+  state.slots[slotId]={pid:nextP.p.id,dx:cur?cur.dx:0,dy:cur?cur.dy:0,scale:cur?cur.scale:1,fresh:true};
+  selUI();render();renderPicks();renderBrowse();save();
+}
+/* ============================================================
+   9. THE PANELS
+   ============================================================ */
+function thumbSVG(p){
+  if(!D[p.d])return "";
+  const d=D[p.d](p.c,p.v,accentHex(),p);
+  const sc=Math.min(46/d.w,46/d.h);
+  return `<svg viewBox="0 0 56 56" aria-hidden="true"><rect width="56" height="56" fill="#F2EDE4"/>`+
+    `<g transform="translate(28 ${28+d.h*sc/2}) scale(${sc})">${d.s}</g></svg>`;
+}
+function shopName(p){return p.url?(p.site||"your link"):(SHOPS[p.r]||{n:"online"}).n;}
+function cardHTML(p,o){
+  const why=(o.why||[]).map(w=>`<span class="tag">${esc(w)}</span>`).join("");
+  const m=o.match!=null?`<span class="match">${o.match}% match</span>`:"";
+  return `<div class="card" data-pid="${p.id}" data-slot="${o.slotId||""}" data-in="${!!o.inRoom}" role="button" tabindex="0">
+    <div class="thumb">${thumbSVG(p)}</div>
+    <div class="meta">
+      <div class="nm">${esc(p.n)}</div>
+      <div class="sub">${o.slotId?esc(SLOT_BY_ID[o.slotId].label):esc(ZONE_LABEL[p.z]||"")} · ${esc(shopName(p))}</div>
+      <div class="row"><span class="price">${money(p.p)}</span>${m}${why}</div>
+    </div>
+    <div class="card-actions">
+      ${o.inRoom?`<button class="icon-btn" data-act="swap" title="Swap for the next best">⇄</button>
+      <button class="icon-btn" data-act="remove" title="Take it out">✕</button>`
+      :`<button class="icon-btn" data-act="place" title="Put it in the room">+</button>`}
+      <button class="icon-btn" data-act="find" title="Search for it online">↗</button>
+    </div>
+  </div>`;
+}
+function renderPicks(){
+  const el=$("#picksList"), items=placed();
+  if(!items.length){
+    el.innerHTML=`<div class="empty-list">The room is empty.<br>Hit <b>Design my room</b>, or add things from <b>Browse</b>.</div>`;
+    return;
+  }
+  const an=analyze();
+  const order=["bed","rug","wall-left","wall-center","window","ceiling","desk-1","desk-2","desk-3","chair","corner-1","corner-2","under"];
+  const sorted=items.sort((a,b)=>order.indexOf(a[0])-order.indexOf(b[0]));
+  el.innerHTML=sorted.map(([slotId,it])=>{
+    const p=productOf(it.pid);
+    return cardHTML(p,{slotId,inRoom:true,why:scoreProduct(p,an).why});
+  }).join("");
+}
+function renderBrowse(){
+  const q=($("#search").value||"").toLowerCase().trim();
+  const zf=$("#zoneFilter").value;
+  const an=analyze(), scoring=an.top.length>0||an.pos.length>0;
+  const ranked=rankAll();
+  const max=Math.max(...ranked.map(r=>r.score),1);
+  const inRoom=new Set(Object.values(state.slots).map(i=>i&&i.pid));
+  const rows=ranked.filter(r=>{
+    if(zf!=="all"&&r.p.z!==zf)return false;
+    if(!q)return true;
+    return (r.p.n+" "+r.p.t).toLowerCase().includes(q);
+  });
+  $("#browseList").innerHTML=rows.length
+    ? rows.map(r=>cardHTML(r.p,{
+        inRoom:inRoom.has(r.p.id),
+        why:r.why,
+        match:scoring?clamp(Math.round(r.score/max*100),4,99):null,
+        slotId:inRoom.has(r.p.id)?Object.keys(state.slots).find(k=>state.slots[k].pid===r.p.id):""
+      })).join("")
+    : `<div class="empty-list">Nothing matches “${esc(q)}”.</div>`;
+}
+function listClick(e){
+  const btn=e.target.closest("[data-act]");
+  const card=e.target.closest(".card"); if(!card)return;
+  const pid=card.dataset.pid, slotId=card.dataset.slot, p=productOf(pid);
+  if(!p)return;
+  if(btn){
+    const a=btn.dataset.act;
+    if(a==="find")findOnline(p);
+    else if(a==="place")placeProduct(pid);
+    else if(a==="remove")removeSlot(slotId);
+    else if(a==="swap")swapSlot(slotId);
+    e.stopPropagation();
+    return;
+  }
+  if(slotId){select(slotId);}
+  else placeProduct(pid);
+}
+function findOnline(p){
+  const url=p.url||((SHOPS[p.r]||{u:"https://www.google.com/search?tbm=shop&q="}).u+encodeURIComponent(p.n));
+  window.open(url,"_blank","noopener");
+}
+
+/* ============================================================
+   10. TOUCHING THINGS IN THE ROOM
+   ============================================================ */
+function select(slotId){
+  state.sel=state.sel===slotId?null:slotId;
+  $$(".hitbox",svg).forEach(g=>g.dataset.selected=(g.dataset.slot===state.sel));
+  selUI();
+}
+function selUI(){
+  const box=$("#selTools"), it=state.sel&&state.slots[state.sel];
+  if(!it||!productOf(it.pid)){box.hidden=true;$("#liveMsg").hidden=false;return;}
+  box.hidden=false;$("#liveMsg").hidden=true;
+  $("#selName").textContent=productOf(it.pid).n;
+}
+function toRoom(e){
+  const r=svg.getBoundingClientRect();
+  return {x:(e.clientX-r.left)/r.width*1200,y:(e.clientY-r.top)/r.height*820};
+}
+let drag=null;
+svg.addEventListener("pointerdown",e=>{
+  const g=e.target.closest(".hitbox"); if(!g)return;
+  const slotId=g.dataset.slot, it=state.slots[slotId]; if(!it)return;
+  if(state.sel!==slotId)select(slotId);
+  const pt=toRoom(e);
+  drag={slotId,g,px:pt.x,py:pt.y,dx0:it.dx||0,dy0:it.dy||0,moved:false};
+  svg.setPointerCapture(e.pointerId);
+  svg.classList.add("dragging");
+  e.preventDefault();
+});
+svg.addEventListener("pointermove",e=>{
+  if(!drag)return;
+  const pt=toRoom(e), slot=SLOT_BY_ID[drag.slotId], it=state.slots[drag.slotId];
+  const [x0,x1,y0,y1]=slot.bounds;
+  it.dx=clamp(drag.dx0+(pt.x-drag.px),x0-slot.x,x1-slot.x);
+  it.dy=clamp(drag.dy0+(pt.y-drag.py),y0-slot.y,y1-slot.y);
+  if(Math.abs(pt.x-drag.px)+Math.abs(pt.y-drag.py)>3)drag.moved=true;
+  drag.g.setAttribute("transform",`translate(${slot.x+it.dx} ${slot.y+it.dy}) scale(${it.scale||1})`);
+});
+function endDrag(){
+  if(!drag)return;
+  const moved=drag.moved;
+  drag=null;svg.classList.remove("dragging");
+  if(moved){render();save();}
+}
+svg.addEventListener("pointerup",endDrag);
+svg.addEventListener("pointercancel",endDrag);
+svg.addEventListener("keydown",e=>{
+  const g=e.target.closest&&e.target.closest(".hitbox"); if(!g)return;
+  const slotId=g.dataset.slot, it=state.slots[slotId]; if(!it)return;
+  const step=e.shiftKey?26:9, slot=SLOT_BY_ID[slotId], [x0,x1,y0,y1]=slot.bounds;
+  const nudge=(ax,ay)=>{
+    it.dx=clamp((it.dx||0)+ax,x0-slot.x,x1-slot.x);
+    it.dy=clamp((it.dy||0)+ay,y0-slot.y,y1-slot.y);
+    render();save();
+    const el=$(`.hitbox[data-slot="${slotId}"]`,svg); if(el)el.focus();
+  };
+  const K={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]};
+  if(K[e.key]){e.preventDefault();nudge(...K[e.key]);}
+  else if(e.key==="Delete"||e.key==="Backspace"){e.preventDefault();removeSlot(slotId);}
+  else if(e.key==="Enter"||e.key===" "){e.preventDefault();select(slotId);}
+});
+$("#selTools").addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]"); if(!b||!state.sel)return;
+  const slotId=state.sel, it=state.slots[slotId]; if(!it)return;
+  const a=b.dataset.act;
+  if(a==="bigger"||a==="smaller"){
+    it.scale=clamp((it.scale||1)+(a==="bigger"?.09:-.09),.55,1.85);
+    render();save();
+  }
+  else if(a==="center"){const pr=productOf(it.pid)||{};it.dx=pr.ox||0;it.dy=pr.oy||0;it.scale=SLOT_BY_ID[slotId].sc||1;render();save();}
+  else if(a==="remove")removeSlot(slotId);
+  else if(a==="swap")swapSlot(slotId);
+  else if(a==="find")findOnline(productOf(it.pid));
+});
+
+/* ============================================================
+   11. PULLING A REAL PRODUCT OFF THE INTERNET
+   ============================================================ */
+const IMG_RE=/\.(jpe?g|png|webp|gif|avif)(\?|$)/i;
+let pulled=null;
+async function readPage(url){
+  const host=(()=>{try{return new URL(url).hostname.replace(/^www\./,"")}catch(e){return ""}})();
+  if(IMG_RE.test(url))return{img:url,title:"",price:null,site:host};
+  /* 1. microlink: proper JSON, CORS-friendly */
+  try{
+    const r=await fetch("https://api.microlink.io/?url="+encodeURIComponent(url),{headers:{accept:"application/json"}});
+    if(r.ok){
+      const j=await r.json();
+      if(j.status==="success"&&j.data){
+        const d=j.data;
+        return{img:(d.image&&d.image.url)||(d.logo&&d.logo.url)||"",title:d.title||"",
+          price:priceFrom((d.description||"")+" "+(d.title||"")),site:d.publisher||host};
+      }
+    }
+  }catch(e){}
+  /* 2. jina reader: markdown of the page */
+  try{
+    const r=await fetch("https://r.jina.ai/"+url);
+    if(r.ok){
+      const txt=(await r.text()).slice(0,6000);
+      const t=(txt.match(/^Title:\s*(.+)$/m)||[])[1]||"";
+      const im=(txt.match(/https?:\/\/[^\s)"']+\.(?:jpe?g|png|webp|avif)/i)||[])[0]||"";
+      return{img:im,title:t.trim(),price:priceFrom(txt),site:host};
+    }
+  }catch(e){}
+  return null;
+}
+function priceFrom(s){
+  const m=String(s).match(/\$\s?(\d{1,4}(?:[.,]\d{2})?)/);
+  return m?parseFloat(m[1].replace(",",".")):null;
+}
+$("#btnFetch").addEventListener("click",async()=>{
+  const url=$("#pullUrl").value.trim();
+  const st=$("#pullStatus");
+  if(!url){st.textContent="Paste a link first.";return;}
+  st.textContent="Reading the page…";
+  $("#btnFetch").disabled=true;
+  const meta=await readPage(url);
+  $("#btnFetch").disabled=false;
+  if(!meta){
+    st.textContent="That site wouldn't hand anything over. Fill in the name and price below and it'll still go in — or paste the image address instead of the page link.";
+    pulled={img:"",title:"",site:"",url};
+    $("#pullPreview").hidden=true;
+    return;
+  }
+  pulled={...meta,url};
+  st.textContent=meta.img?"Got it. Check the details, then put it in the room.":"Read the page, but found no photo — it'll go in as a plain card.";
+  $("#pullPreview").hidden=false;
+  $("#pullImg").src=meta.img||"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E";
+  $("#pullTitle").textContent=meta.title||"(no title found)";
+  $("#pullSite").textContent=meta.site||"";
+  if(meta.title&&!$("#pullName").value)$("#pullName").value=meta.title.slice(0,60);
+  if(meta.price&&!$("#pullPrice").value)$("#pullPrice").value=meta.price;
+});
+$("#btnAddPulled").addEventListener("click",()=>{
+  const url=$("#pullUrl").value.trim();
+  const name=($("#pullName").value||(pulled&&pulled.title)||"Something I found").slice(0,70);
+  const price=parseFloat($("#pullPrice").value)||(pulled&&pulled.price)||0;
+  const z=$("#pullZone").value;
+  const img=(pulled&&pulled.img)||(IMG_RE.test(url)?url:"");
+  const p={id:"my"+(++uid),n:name,z,d:"photo",v:"card",c:["#FFFFFF","#EFE9DF"],p:price,r:"target",
+    t:tokenize(name).join(" ")+" "+z,custom:true,img,url:url||"",site:(pulled&&pulled.site)||""};
+  state.custom.push(p);
+  placeProduct(p.id);
+  $("#pullStatus").textContent="Added. It'll stay put when you re-design.";
+  $("#pullName").value="";$("#pullPrice").value="";$("#pullUrl").value="";
+  $("#pullPreview").hidden=true;pulled=null;
+});
+
+/* ============================================================
+   12. SAVE / SHARE / EXPORT
+   ============================================================ */
+const KEY="dormstudio.v1";
+function serialize(){return{t:state.text,c:[...state.chips],a:state.accent,b:state.budget,n:state.night,s:state.slots,x:state.custom};}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(serialize()));}catch(e){}}
+function restore(o){
+  if(!o)return false;
+  state.text=o.t||"";state.chips=new Set(o.c||[]);state.accent=o.a||"none";
+  state.budget=o.b||700;state.night=!!o.n;state.slots=o.s||{};state.custom=o.x||[];
+  return true;
+}
+function syncForm(){
+  $("#vibeText").value=state.text;
+  $("#budget").value=state.budget;$("#budgetVal").textContent=money(state.budget);
+  $$("#vibeChips .chip").forEach(b=>b.setAttribute("aria-pressed",state.chips.has(b.dataset.id)));
+  $$("#accentPick .swatch").forEach(b=>b.setAttribute("aria-pressed",b.dataset.id===state.accent));
+  $("#btnNight").setAttribute("aria-pressed",state.night);
+  document.documentElement.dataset.time=state.night?"night":"day";
+}
+$("#btnShare").addEventListener("click",async()=>{
+  try{
+    const s=btoa(unescape(encodeURIComponent(JSON.stringify(serialize()))));
+    const url=location.origin+location.pathname+"#r="+s;
+    history.replaceState(null,"","#r="+s);
+    await navigator.clipboard.writeText(url);
+    toast("Link copied — it opens this exact room.");
+  }catch(e){toast("Couldn't copy, but the link is in your address bar.");}
+});
+$("#btnExport").addEventListener("click",()=>{
+  const clone=svg.cloneNode(true);
+  $$(".hit-outline",clone).forEach(n=>n.remove());
+  clone.setAttribute("width","2400");clone.setAttribute("height","1640");
+  const xml=new XMLSerializer().serializeToString(clone);
+  const img=new Image();
+  img.onload=()=>{
+    const cv=document.createElement("canvas");cv.width=2400;cv.height=1640;
+    const cx=cv.getContext("2d");cx.drawImage(img,0,0);
+    try{
+      cv.toBlob(b=>{
+        const a=document.createElement("a");
+        a.href=URL.createObjectURL(b);a.download="my-dorm-room.png";a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+        toast("Saved my-dorm-room.png");
+      });
+    }catch(e){toast("Export blocked by a photo pulled from another site.");}
+  };
+  img.onerror=()=>toast("Couldn't render the export.");
+  img.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(xml);
+});
+$("#btnNight").addEventListener("click",()=>{
+  state.night=!state.night;syncForm();render();save();
+});
+$("#btnShuffle").addEventListener("click",()=>{
+  if(!placed().length)return autofill();
+  autofill();toast("Re-rolled.");
+});
+$("#btnClear").addEventListener("click",()=>{
+  state.slots={};state.sel=null;selUI();render();renderPicks();renderBrowse();save();
+});
+$("#btnDesign").addEventListener("click",()=>{
+  state.text=$("#vibeText").value;
+  autofill();
+  const an=analyze();
+  toast(an.top.length?"Reading you as "+an.top[0].v.label.toLowerCase()+".":"Filled it in — add some words to steer it.");
+});
+$("#btnReset").addEventListener("click",()=>{
+  state.text="";state.chips.clear();state.accent="none";
+  syncForm();render();renderBrowse();save();
+});
+
+/* ============================================================
+   13. WIRING IT UP
+   ============================================================ */
+function buildControls(){
+  $("#vibeChips").innerHTML=VIBES.map(v=>
+    `<button class="chip" data-id="${v.id}" aria-pressed="false"><span class="dot" style="background:${v.dot}"></span>${esc(v.label)}</button>`).join("");
+  $("#accentPick").innerHTML=ACCENTS.map(a=>
+    `<button class="swatch" data-id="${a.id}" title="${esc(a.label)}" aria-label="${esc(a.label)}" aria-pressed="${a.id==="none"}" style="background:${a.hex}"></button>`).join("");
+  const zones=Object.entries(ZONE_LABEL);
+  $("#pullZone").innerHTML=zones.map(([z,l])=>`<option value="${z}">${esc(l)}</option>`).join("");
+  $("#zoneFilter").innerHTML=`<option value="all">Everything</option>`+zones.map(([z,l])=>`<option value="${z}">${esc(l)}</option>`).join("");
+}
+function live(){render();renderBrowse();save();}
+buildControls();
+
+$("#vibeChips").addEventListener("click",e=>{
+  const b=e.target.closest(".chip"); if(!b)return;
+  const id=b.dataset.id;
+  state.chips.has(id)?state.chips.delete(id):state.chips.add(id);
+  syncForm();
+  placed().length?autofill():live();
+});
+$("#accentPick").addEventListener("click",e=>{
+  const b=e.target.closest(".swatch"); if(!b)return;
+  state.accent=b.dataset.id;syncForm();
+  placed().length?autofill():live();
+});
+$("#budget").addEventListener("input",e=>{
+  state.budget=+e.target.value;$("#budgetVal").textContent=money(state.budget);updateStats();
+});
+$("#budget").addEventListener("change",()=>{placed().length?autofill():live();});
+let typeT;
+$("#vibeText").addEventListener("input",e=>{
+  clearTimeout(typeT);
+  typeT=setTimeout(()=>{state.text=e.target.value;live();renderPicks();},450);
+});
+$("#vibeText").addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==="Enter"){e.preventDefault();$("#btnDesign").click();}
+});
+$("#search").addEventListener("input",renderBrowse);
+$("#zoneFilter").addEventListener("change",renderBrowse);
+$("#picksList").addEventListener("click",listClick);
+$("#browseList").addEventListener("click",listClick);
+[["#picksList"],["#browseList"]].forEach(([sel])=>{
+  $(sel).addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){const c=e.target.closest(".card");if(c){e.preventDefault();listClick(e);}}
+  });
+});
+function showTab(which){
+  const picks=which==="picks";
+  $("#tabPicks").setAttribute("aria-selected",picks);
+  $("#tabBrowse").setAttribute("aria-selected",!picks);
+  $("#panePicks").hidden=!picks;$("#paneBrowse").hidden=picks;
+}
+$("#tabPicks").addEventListener("click",()=>showTab("picks"));
+$("#tabBrowse").addEventListener("click",()=>showTab("browse"));
+window.addEventListener("resize",()=>paintLights(currentTheme()));
+
+/* first paint: URL hash > saved room > empty */
+(function boot(){
+  let loaded=false;
+  const h=location.hash.match(/^#r=(.+)$/);
+  if(h){try{loaded=restore(JSON.parse(decodeURIComponent(escape(atob(h[1])))));}catch(e){}}
+  if(!loaded){try{loaded=restore(JSON.parse(localStorage.getItem(KEY)));}catch(e){}}
+  syncForm();
+  render();renderPicks();renderBrowse();selUI();
+  if(!placed().length)showTab("browse");
+})();
+</script>
+</body>
+</html>
